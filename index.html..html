@@ -1,0 +1,2317 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kreasi Literasi Digital - Wadah Inspirasi & Kurasi Karya</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Plus Jakarta Sans & Playfair Display -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+
+        // ===== DIKSI CLOUD DATABASE (Google Sheets) =====
+        const DIKSI_API_URL = "https://script.google.com/macros/s/AKfycbwwNtIYNzHPpAL4NPCv5eY_7XfRktxdzsJ0DIuYUmgq2epVtM7e-FYE09XCMoSnqUE1/exec";
+        let diksiCloudReady = false;
+        let diksiLikesState = {};
+        let diksiCommentsState = {};
+
+        function diksiJsonp(params) {
+            return new Promise((resolve, reject) => {
+                const cb = 'diksi_cb_' + Date.now() + '_' + Math.floor(Math.random()*100000);
+                const script = document.createElement('script');
+                const timer = setTimeout(() => { cleanup(); reject(new Error('Koneksi ke database timeout')); }, 15000);
+                function cleanup(){ clearTimeout(timer); delete window[cb]; script.remove(); }
+                window[cb] = data => { cleanup(); resolve(data); };
+                script.onerror = () => { cleanup(); reject(new Error('Tidak dapat menghubungi Google Sheets')); };
+                script.src = DIKSI_API_URL + '?' + new URLSearchParams({...params, callback:cb}).toString();
+                document.head.appendChild(script);
+            });
+        }
+        function diksiPost(payload) {
+            const body = new URLSearchParams();
+            Object.entries(payload).forEach(([k,v]) => body.set(k, typeof v === 'string' ? v : JSON.stringify(v)));
+            return fetch(DIKSI_API_URL, { method:'POST', mode:'no-cors', body })
+                .then(() => new Promise(resolve => setTimeout(resolve, 900)));
+        }
+        async function diksiRefreshFromSheets(showMessage=false) {
+            try {
+                const result = await diksiJsonp({action:'state'});
+                if (!result || !result.ok) throw new Error(result?.message || 'Respons database tidak valid');
+                membersState = result.members || [];
+                worksState = result.works || [];
+                diksiLikesState = result.likes || {};
+                diksiCommentsState = result.comments || {};
+                diksiCloudReady = true;
+                renderPublicView();
+                renderAdminView();
+                if (showMessage) showToast('Database Diperbarui', 'Data DIKSI berhasil dimuat dari Google Sheets.');
+                return true;
+            } catch (err) {
+                console.error(err);
+                if (showMessage) showToast('Koneksi Database Gagal', err.message + '. Periksa URL Web App dan deployment.');
+                return false;
+            }
+        }
+        async function diksiSave(action, data={}) {
+            try {
+                await diksiPost({action, ...data});
+                await diksiRefreshFromSheets(false);
+                return true;
+            } catch(err) {
+                console.error(err);
+                showToast('Gagal Mengirim Data', 'Periksa koneksi internet lalu coba kembali.');
+                return false;
+            }
+        }
+
+        tailwind.config = {
+    theme: {
+        extend: {
+            colors: {
+                brand: {
+                    50: '#f5f7f5',   // Putih kehijauan sangat lembut
+                    100: '#e3ebe3',  // Sage muda tipis
+                    600: '#607d6b',  // Sage/Olive kalem untuk tombol & aksen utama
+                    700: '#4d6556',  // Sage gelap untuk hover
+                    900: '#2b3830',  // Hijau tua lembut untuk teks utama
+                },
+                slate: {
+                    50: '#fcfbfa',   // Latar belakang utama yang cerah & hangat
+                    100: '#f4f1ea',  // Cream sangat muda
+                    200: '#e8e2d5',
+                    700: '#736d65',
+                    800: '#4a453f',
+                    850: '#332f2b',
+                    900: '#221f1c',  // Abu-abu kecokelatan gelap yang ramah di mata
+                }
+            },
+            fontFamily: {
+                sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                serif: ['"Playfair Display"', 'serif'],
+            }
+        }
+    }
+}
+    </script>
+    <style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+        }
+        /* Custom Modern Glassmorphism & Cyber Grid Styling */
+        .glass-cyber {
+            background: rgba(36, 91, 219, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        .glass-cyber-card {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(199, 210, 254, 0.6);
+            box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.08);
+        }
+        /* Tech Grid Pattern Background */
+        .bg-cyber-grid {
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(214, 214, 247, 0.07) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(99, 102, 241, 0.07) 1px, transparent 1px);
+        }
+        /* Animated Gradient Background */
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .animate-gradient-mesh {
+            background: linear-gradient(-45deg, #f18933, #63641e, #54529e, #2a7a7a, #d8f375);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        .animate-glow {
+            animation: pulseGlow 6s ease-in-out infinite;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-full font-sans text-slate-800 flex flex-col antialiased bg-slate-900">
+
+   
+   <!-- TOP NAVIGATION BAR -->
+<header class="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-900/90 backdrop-blur-md shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+            <!-- Brand Logo -->
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="switchView('public')">
+                
+                <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-600 to-emerald-400 flex items-center justify-center text-white shadow-md shadow-indigo-500/30">
+                    <i class="fa-solid me-0.5 fa-book-open-reader text-xl"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-bold tracking-tight text-white block leading-tight font-serif">Kreasi Literasi</span>
+                    <span class="text-[10px] font-bold tracking-widest text-cyan-400 uppercase block">Digital Platform</span>
+                </div>
+            </div>
+
+            <!-- Main Nav (Desktop) -->
+            <nav id="public-nav-links" class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
+                <a href="#hero" class="text-cyan-400 font-semibold hover:text-cyan-300 transition flex items-center space-x-1">
+                    <i class="fa-solid fa-house text-xs"></i><span>Beranda</span>
+                </a>
+                <a href="#kategori" class="hover:text-cyan-400 transition">Baca Karya</a>
+                <a href="#peringkat" class="hover:text-cyan-400 transition">Penulis Terbaik</a>
+                <a href="#alur" class="hover:text-cyan-400 transition">Panduan Kurasi</a>
+                <a href="#ajakan" class="hover:text-cyan-400 transition">Tentang Kami</a>
+            </nav>
+
+            <!-- User Actions & View Switcher -->
+            <div class="flex items-center space-x-3">
+                <!-- Mode Switcher (Public vs Admin) -->
+                <div class="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700 text-xs font-semibold">
+                    <button id="btn-mode-public" onclick="switchView('public')" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white shadow-sm transition-all duration-200 flex items-center space-x-1.5 font-bold">
+                        <i class="fa-solid fa-globe"></i>
+                        <span>Publik</span>
+                    </button>
+                    <button id="btn-mode-admin" onclick="requestAdminAccess()" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all duration-200 flex items-center space-x-1.5 font-normal">
+                        <i class="fa-solid fa-user-shield"></i>
+                        <span>Dasbor Admin</span>
+                        <span id="badge-queue-count" class="ml-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">2</span>
+                    </button>
+                </div>
+
+                <!-- CTA Daftar Anggota -->
+                <button onclick="openRegisterMemberModal()" class="hidden sm:inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg transition duration-200">
+                    <i class="fa-solid fa-user-plus text-xs"></i>
+                    <span>Daftar Anggota</span>
+                </button>
+
+                <!-- CTA Kirim Karya (Public) -->
+                <button onclick="openSubmitModal()" class="hidden sm:inline-flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 transition duration-200">
+                    <i class="fa-solid fa-paper-plane text-xs"></i>
+                    <span>Kirim Karya</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- NOTIFICATION TOAST -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 ease-out max-w-md bg-slate-900 text-white px-5 py-4 rounded-xl shadow-2xl flex items-center space-x-3 border border-slate-700 pointer-events-none">
+        <div id="toast-icon" class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-check text-sm"></i>
+        </div>
+        <div>
+            <h4 id="toast-title" class="font-semibold text-sm">Berhasil</h4>
+            <p id="toast-message" class="text-xs text-slate-300 mt-0.5">Aksi telah berhasil dilaksanakan.</p>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-grow">
+        
+        <!-- ========================================== -->
+        <!-- 1. HALAMAN MUKA PUBLIK (CYBER & MODERN)   -->
+        <!-- ========================================== -->
+        <div id="view-public" class="space-y-16 pb-20 bg-slate-950 text-slate-100">
+            <!-- Hero Banner Modern Literasi Digital -->
+            <section id="hero" class="relative overflow-hidden animate-gradient-mesh border-b border-indigo-900/40 pt-0 pb-1">
+                <div class="lg:col-span-1 space-y-1 flex flex-col items-center lg:items-center justify">
+                    <img src="c:\Users\User\Downloads\DIKSI\Logo_DIKSI_Digital_Kreasi_Literasi-removebg-preview.png" width="450" height="320" />
+                </div>
+            
+                <!-- Tech Grid Pattern & Glow Orbs -->
+                <div class="absolute inset-0 bg-cyber-grid pointer-events-none opacity-40"></div>
+                <div class="absolute -top-24 left-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-glow"></div>
+                <div class="absolute top-1/2 right-10 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl animate-glow" style="animation-delay: 3s;"></div>
+
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+                        
+                        <!-- Hero Left Content -->
+                        <div class="lg:col-span-7 space-y-6 text-center lg:text-left">
+                            <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-400/30 text-cyan-300 text-xs font-semibold backdrop-blur-md">
+                                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                                <i class="fa-solid fa-sparkles text-amber-300"></i>
+                                <span>Platform Literasi Digital Masa Depan</span>
+                            </div>
+
+                            <h1 class="text-2xl sm:text-3xl lg:text-4xl font-serif font-bold text-white leading-tight">
+                                Ruang Kreasi Literasi Digital: <span class="bg-gradient-to-r from-cyan-400 via-indigo-300 to-emerald-300 bg-clip-text text-cyan-400/40 decoration-wavy">Tempat Gagasan Dituliskan</span> Karya Dibagikan </span> Kreatifitas Diapresiasi
+                            </h1>
+
+                            <p class="text-base sm:text-lg text-slate-200 leading-relaxed font-normal max-w-2xl mx-auto lg:mx-0">
+                                Wadah penulisan modern, artikel opini, cerpen fiksi, dan jurnal ilmiah bertema kecerdasan digital. Terhubung langsung dengan tim kurator profesional.
+                            </p>
+
+                            <!-- Hero CTAs -->
+                            <div class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
+                                <a href="#kategori" class="w-full sm:w-auto px-8 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition text-center flex items-center justify-center space-x-2">
+                                    <i class="fa-solid fa-book-open"></i>
+                                    <span>Mulai Membaca</span>
+                                </a>
+                                <button onclick="openSubmitModal()" class="w-full sm:w-auto px-8 py-4 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-cyan-300 font-bold text-sm border border-cyan-500/30 backdrop-blur-md shadow-md transition text-center flex items-center justify-center space-x-2">
+                                    <i class="fa-solid fa-file-arrow-up text-cyan-400"></i>
+                                    <span>Kirim Karya / Upload PDF</span>
+                                </button>
+                            </div>
+
+                            <!-- Floating Badges / Tech Metrics -->
+                            <div class="pt-6 grid grid-cols-3 gap-3 max-w-md mx-auto lg:mx-0 text-center">
+                                <div class="glass-cyber p-3 rounded-2xl border border-indigo-500/20">
+                                    <h4 class="text-lg font-bold text-cyan-300">100%</h4>
+                                    <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Kurasi Digital</p>
+                                </div>
+                                <div class="glass-cyber p-3 rounded-2xl border border-indigo-500/20">
+                                    <h4 class="text-lg font-bold text-emerald-400">Real-Time</h4>
+                                    <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Publikasi Karya</p>
+                                </div>
+                                <div class="glass-cyber p-3 rounded-2xl border border-indigo-500/20">
+                                    <h4 class="text-lg font-bold text-indigo-300">PDF / Doc</h4>
+                                    <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Dukungan Berkas</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Hero Right Interactive Cyber Card Showcase -->
+                        <div class="lg:col-span-5 relative">
+                            <!-- Glowing Background Ring -->
+                            <div class="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-3xl blur opacity-30 animate-pulse"></div>
+                            
+                            <div class="glass-cyber relative rounded-3xl p-6 sm:p-8 space-y-6 text-left border border-cyan-500/30">
+                                <div class="flex items-center justify-between border-b border-slate-700/60 pb-4">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                                        <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                                        <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                    </div>
+                                    <span class="text-xs font-mono text-cyan-400 flex items-center space-x-1">
+                                        <i class="fa-solid fa-code text-xs"></i>
+                                        <span>KreasiLiterasi v2.5</span>
+                                    </span>
+                                </div>
+
+                                <div class="space-y-4">
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 text-cyan-300 flex items-center justify-center shrink-0">
+                                            <i class="fa-solid fa-quote-left text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <h4 class="text-sm font-bold text-white">Etalase Inspirasi Masa Kini</h4>
+                                            <p class="text-xs text-slate-300 mt-1 leading-relaxed font-serif italic">
+                                                "Menulis di era digital adalah tentang menabur benih ide di ruang tanpa batas."
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800 space-y-2">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="-400">Status Naskah Masuk</span>
+                                            <span class="text-emerald-400 font-mono font-semibold">100% Terverifikasi</span>
+                                        </div>
+                                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                            <div class="bg-gradient-to-r from-cyan-400 to-indigo-500 h-full w-4/5 rounded-full"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="pt-2 flex items-center justify-between text-xs text-slate-400">
+                                    <span class="flex items-center"><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i> Standar PUEBI & Normatif</span>
+                                    
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <!-- STATISTIK KOMUNITAS DIKSI -->
+            <section id="statistik-komunitas" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4">
+                <div class="relative overflow-hidden rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 shadow-xl">
+                    <div class="absolute -right-12 -top-16 h-56 w-56 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none"></div>
+                    <div class="relative z-10">
+                        <div class="text-center mb-6">
+                            <p class="text-xs font-bold uppercase tracking-[0.25em] text-cyan-300">Tumbuh Bersama</p>
+                            <h2 class="mt-2 text-2xl sm:text-3xl font-serif font-bold text-white">Statistik Komunitas DIKSI</h2>
+                            <p class="mt-2 text-sm text-slate-300">Ruang berbagi gagasan, karya, dan inspirasi.</p>
+                        </div>
+                        <div class="mx-auto grid max-w-2xl grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="rounded-2xl border border-cyan-400/20 bg-slate-950/50 p-6 text-center">
+                                <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-300"><i class="fa-solid fa-users text-xl"></i></div>
+                                <p id="public-stat-members" class="text-4xl font-bold tracking-tight text-cyan-300">0</p>
+                                <p class="mt-1 text-xs font-semibold uppercase tracking-widest text-slate-300">Total Anggota</p>
+                            </div>
+                            <div class="rounded-2xl border border-emerald-400/20 bg-slate-950/50 p-6 text-center">
+                                <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300"><i class="fa-solid fa-book-open text-xl"></i></div>
+                                <p id="public-stat-works" class="text-4xl font-bold tracking-tight text-emerald-300">0</p>
+                                <p class="mt-1 text-xs font-semibold uppercase tracking-widest text-slate-300">Total Karya Terbit</p>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-center text-[11px] text-slate-400">Angka diperbarui otomatis berdasarkan data yang tersimpan pada website ini.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Etalase Karya Pilihan (Featured Works) -->
+            <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex flex-col md:flex-row md:items-end justify-between mb-8">
+                    <div>
+                        <h2 class="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-1">Kurasi Pilihan Redaksi</h2>
+                        <h3 class="text-2xl font-serif font-bold text-white">Etalase Karya Terbaik</h3>
+                    </div>
+                    <p class="text-sm text-slate-400 mt-2 md:mt-0">Tulisan pilihan tim kurator dengan standar estetika & edukasi tinggi.</p>
+                </div>
+
+                <div id="featured-works-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Dynamic Featured Cards inserted via JS -->
+                </div>
+            </section>
+
+            <!-- Kategori Karya (Jelajah Ragam Kreasi) -->
+            <section id="kategori" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="bg-slate-900/90 rounded-3xl p-8 sm:p-12 text-white relative overflow-hidden border border-slate-800 shadow-2xl">
+                    <div class="absolute -right-10 -bottom-10 w-72 h-72 bg-cyan-600/15 rounded-full blur-3xl"></div>
+                    
+                    <div class="relative z-10">
+                        <div class="text-center max-w-2xl mx-auto mb-10">
+                            <h2 class="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-2">Eksplorasi Tema</h2>
+                            <h3 class="text-3xl font-serif font-bold">Jelajah Ragam Kreasi Literasi</h3>
+                            <p class="text-slate-400 text-sm mt-2">Jelajahi karya berdasarkan delapan kelompok: Keagamaan, Karya Kreatif, Edukasi, Opini & Refleksi, Reviu, Pengalaman, Budaya & Lingkungan, serta Teknologi.</p>
+                        </div>
+
+                        <!-- Pengelompokan 8 Kategori Karya -->
+                        <div id="taxonomy-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+                            <!-- Kartu kategori dibuat otomatis dari categoriesState -->
+                        </div>
+
+                        <!-- Filter Kategori -->
+                        <div class="flex flex-wrap justify-center gap-2 mb-8" id="category-filter-buttons">
+                            <button onclick="filterCategory('all')" class="cat-btn active px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 text-white transition">Semua Karya</button>
+                        </div>
+
+                        <!-- Published Works Cards Container -->
+                        <div id="published-works-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <!-- Dynamic Published Items -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Papan Peringkat Penulis (Top Contributors) -->
+            <section id="peringkat" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                    <!-- Left Intro -->
+                    <div class="lg:col-span-1 space-y-4">
+                        <span class="text-xs font-bold text-cyan-400 uppercase tracking-widest">Komunitas Aktif</span>
+                        <h3 class="text-2xl font-serif font-bold text-white">Papan Peringkat Kontributor</h3>
+                        <p class="text-slate-400 text-sm leading-relaxed">
+                            Apresiasi tinggi bagi para kontributor yang konsisten membagikan karya berkualitas dan menginspirasi masyarakat digital.
+                        </p>
+                        <div class="p-4 bg-slate-900 rounded-2xl border border-slate-800 flex items-center space-x-4">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md">
+                                <i class="fa-solid fa-award"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-semibold text-white">Penghargaan Bulanan</h4>
+                                <p class="text-xs text-slate-400">Karya terfavorit akan diterbitkan dalam E-Book Tahunan.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Contributor List -->
+                    <div class="lg:col-span-2 bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-sm">
+                        <div class="divide-y divide-slate-800" id="top-contributors-list">
+                            <!-- Dynamic Contributor Rows -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Alur Kirim Karya (4 Langkah) -->
+            <section id="alur" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center max-w-xl mx-auto mb-12">
+                    <h2 class="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-1">Prosedur Publikasi</h2>
+                    <h3 class="text-2xl font-serif font-bold text-white">Alur Kontribusi Karya</h3>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-center relative shadow-sm hover:border-indigo-500/50 transition">
+                        <div class="w-12 h-12 bg-indigo-500/20 text-cyan-400 rounded-xl flex items-center justify-center mx-auto mb-4 font-bold text-lg border border-indigo-500/30">1</div>
+                        <h4 class="font-bold text-white text-base mb-1">Daftar Anggota</h4>
+                        <p class="text-xs text-slate-400">Buat akun profil diri singkat sebagai penulis resmi.</p>
+                    </div>
+
+                    <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-center relative shadow-sm hover:border-indigo-500/50 transition">
+                        <div class="w-12 h-12 bg-indigo-500/20 text-cyan-400 rounded-xl flex items-center justify-center mx-auto mb-4 font-bold text-lg border border-indigo-500/30">2</div>
+                        <h4 class="font-bold text-white text-base mb-1">Upload Berkas PDF / Doc</h4>
+                        <p class="text-xs text-slate-400">Isi data karya dan unggah naskah langsung format PDF/Document.</p>
+                    </div>
+
+                    <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-center relative shadow-sm hover:border-amber-500/50 transition">
+                        <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-xl flex items-center justify-center mx-auto mb-4 font-bold text-lg border border-amber-500/30">3</div>
+                        <h4 class="font-bold text-white text-base mb-1">Proses Kurasi</h4>
+                        <p class="text-xs text-slate-400" id="guide-step-3-text">Tim kurator memeriksa kesesuaian norma & PUEBI naskah.</p>
+                    </div>
+
+                    <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-center relative shadow-sm hover:border-emerald-500/50 transition">
+                        <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center mx-auto mb-4 font-bold text-lg border border-emerald-500/30">4</div>
+                        <h4 class="font-bold text-white text-base mb-1">Tayang & Terbit</h4>
+                        <p class="text-xs text-slate-400">Naskah diterbitkan secara resmi di pustaka publik situs.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Teks Ajakan Berkontribusi (Formal & Elegan) -->
+            <section id="ajakan" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-8 sm:p-12 text-white border border-indigo-800/60 shadow-2xl relative overflow-hidden">
+                    <div class="max-w-3xl relative z-10 space-y-6">
+                        <div class="w-12 h-12 bg-cyan-500/20 rounded-2xl flex items-center justify-center border border-cyan-400/30 text-cyan-300">
+                            <i class="fa-solid fa-feather-pointed text-xl"></i>
+                        </div>
+                        <blockquote class="text-lg sm:text-xl font-serif italic text-slate-200 leading-relaxed" id="public-guideline-text">
+                            "Kami mendedikasikan ruang ini bagi siapapun yang ingin berbagi inspirasi dan berkontribusi secara nyata. Silakan kirimkan artikel terbaik, ringkasan materi, maupun kisah inspiratif Anda mengenai literasi digital melalui formulir yang tersedia. Setiap karya yang berhasil melewati proses kurasi akan disajikan secara eksklusif dalam pustaka digital (e-book) pada situs ini."
+                        </blockquote>
+                        <div class="pt-2 flex items-center space-x-4">
+                            
+                            </button>
+                            <span class="text-xs text-slate-400">Tim Kurator Kreasi Literasi Digital</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 2. DASBOR UTAMA ADMIN & MENU INTERAKTIF    -->
+        <!-- ========================================== -->
+        <div id="view-admin" class="hidden bg-slate-100 min-h-screen">
+            <div class="flex h-full">
+                
+                <!-- Admin Sidebar Navigation -->
+                <aside class="w-64 bg-slate-900 text-slate-300 flex-shrink-0 min-h-screen p-5 flex flex-col justify-between hidden md:flex">
+                    <div class="space-y-6">
+                        <div class="px-2">
+                            <span class="text-xs font-bold uppercase tracking-wider text-indigo-400">Panel Kurator</span>
+                            <h2 class="text-lg font-bold text-white mt-1">Admin Dasbor</h2>
+                        </div>
+                        <nav class="space-y-1 text-sm font-medium">
+                            <button onclick="switchAdminTab('overview')" id="nav-tab-overview" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold shadow-sm transition">
+                                <i class="fa-solid fa-chart-pie w-5 text-center"></i>
+                                <span>Dashboard Overview</span>
+                            </button>
+                            <button onclick="switchAdminTab('curation')" id="nav-tab-curation" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-slate-800 hover:text-white transition">
+                                <div class="flex items-center space-x-3">
+                                    <i class="fa-solid fa-list-check w-5 text-center"></i>
+                                    <span>Ruang Kurasi</span>
+                                </div>
+                                <span id="badge-queue-curation" class="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">2</span>
+                            </button>
+                            <button onclick="switchAdminTab('cms')" id="nav-tab-cms" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 hover:text-white transition">
+                                <i class="fa-solid fa-newspaper w-5 text-center"></i>
+                                <span>Manajemen Karya (CMS)</span>
+                            </button>
+                            <button onclick="switchAdminTab('members')" id="nav-tab-members" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 hover:text-white transition">
+                                <i class="fa-solid fa-users w-5 text-center"></i>
+                                <span>Manajemen Anggota</span>
+                            </button>
+                            <button onclick="switchAdminTab('settings')" id="nav-tab-settings" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 hover:text-white transition">
+                                <i class="fa-solid fa-sliders w-5 text-center"></i>
+                                <span>Pengaturan Platform</span>
+                            </button>
+                        </nav>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-800 space-y-2">
+                        <button onclick="logoutAdmin()" class="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-semibold transition border border-red-500/30">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                            <span>Keluar / Logout Admin</span>
+                        </button>
+                        <button onclick="switchView('public')" class="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+                            <i class="fa-solid fa-arrow-left"></i>
+                            <span>Lihat Halaman Publik</span>
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- Admin Main Workspace Panel Container -->
+                <div class="flex-grow p-4 sm:p-8 max-w-7xl mx-auto space-y-6">
+
+                    <!-- Mobile Admin Nav Pills -->
+                    <div class="flex md:hidden items-center justify-between overflow-x-auto space-x-2 pb-2 text-xs font-semibold">
+                        <div class="flex space-x-2">
+                            <button onclick="switchAdminTab('overview')" class="px-3 py-2 rounded-xl bg-indigo-600 text-white shrink-0">Overview</button>
+                            <button onclick="switchAdminTab('curation')" class="px-3 py-2 rounded-xl bg-white border shrink-0">Kurasi</button>
+                            <button onclick="switchAdminTab('cms')" class="px-3 py-2 rounded-xl bg-white border shrink-0">CMS</button>
+                            <button onclick="switchAdminTab('members')" class="px-3 py-2 rounded-xl bg-white border shrink-0">Anggota</button>
+                            <button onclick="switchAdminTab('settings')" class="px-3 py-2 rounded-xl bg-white border shrink-0">Pengaturan</button>
+                        </div>
+                        <button onclick="logoutAdmin()" class="px-3 py-2 rounded-xl bg-red-100 text-red-600 border border-red-200 shrink-0 font-bold" title="Logout">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+
+                    <!-- ================================= -->
+                    <!-- TAB 1: DASHBOARD OVERVIEW        -->
+                    <!-- ================================= -->
+                    <div id="admin-tab-overview" class="space-y-6">
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                                <h1 class="text-2xl font-serif font-bold text-slate-900">Dashboard Overview</h1>
+                                <p class="text-xs text-slate-500 mt-1">Ringkasan aktivitas platform, statistik publikasi, dan aksi cepat admin.</p>
+                            </div>
+                            <button onclick="switchAdminTab('curation')" class="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition">
+                                <i class="fa-solid fa-clipboard-check mr-1.5"></i> Periksa Antrean Kurasi
+                            </button>
+                        </div>
+
+                        <!-- Metric Cards -->
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                                <div class="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center text-lg shrink-0">
+                                    <i class="fa-solid fa-hourglass-half"></i>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Antrean Kurasi</span>
+                                    <h3 id="overview-stat-pending" class="text-xl font-bold text-slate-900">2</h3>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                                <div class="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-lg shrink-0">
+                                    <i class="fa-solid fa-circle-check"></i>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Karya Tayang</span>
+                                    <h3 id="overview-stat-published" class="text-xl font-bold text-slate-900">4</h3>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                                <div class="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-lg shrink-0">
+                                    <i class="fa-solid fa-users"></i>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Total Anggota</span>
+                                    <h3 id="overview-stat-members" class="text-xl font-bold text-slate-900">4</h3>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                                <div class="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-lg shrink-0">
+                                    <i class="fa-solid fa-layer-group"></i>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Kategori Aktif</span>
+                                    <h3 id="overview-stat-categories" class="text-xl font-bold text-slate-900">6</h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Overview Quick Activity Table -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+                            <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+                                <div>
+                                    <h3 class="font-bold text-slate-900 text-base">Antrean Masuk Terbaru</h3>
+                                    <p class="text-xs text-slate-500">Naskah yang membutuhkan evaluasi kurator segera.</p>
+                                </div>
+                                <button onclick="switchAdminTab('curation')" class="text-xs font-semibold text-indigo-600 hover:underline">Lihat Semua Antrean &rarr;</button>
+                            </div>
+                            <div id="overview-quick-queue-list" class="divide-y divide-slate-100">
+                                <!-- Dynamic List -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================================= -->
+                    <!-- TAB 2: RUANG KURASI              -->
+                    <!-- ================================= -->
+                    <div id="admin-tab-curation" class="hidden space-y-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                            <div>
+                                <h1 class="text-2xl font-serif font-bold text-slate-900">Ruang Kurasi & Evaluation</h1>
+                                <p class="text-xs text-slate-500 mt-1">Verifikasi naskah masuk dari anggota sebelum diterbitkan ke publik.</p>
+                            </div>
+                            <span class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>Antrean Aktif</span>
+                            </span>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <h3 class="font-bold text-slate-900 text-base">Tabel Antrean Naskah Masuk</h3>
+                                <input type="text" id="curation-search" onkeyup="filterCurationTable()" placeholder="Cari judul / penulis..." class="px-3.5 py-1.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52">
+                            </div>
+
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm text-slate-600">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th class="px-6 py-4">Tanggal Masuk</th>
+                                            <th class="px-6 py-4">Penulis</th>
+                                            <th class="px-6 py-4">Judul Karya</th>
+                                            <th class="px-6 py-4">Berkas Dokumen</th>
+                                            <th class="px-6 py-4">Status</th>
+                                            <th class="px-6 py-4 text-right">Aksi Kurasi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-queue-tbody" class="divide-y divide-slate-100">
+                                        <!-- Dynamic Curation Rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================================= -->
+                    <!-- TAB 3: MANAJEMEN KARYA (CMS)     -->
+                    <!-- ================================= -->
+                    <div id="admin-tab-cms" class="hidden space-y-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                            <div>
+                                <h1 class="text-2xl font-serif font-bold text-slate-900">Manajemen Karya (CMS)</h1>
+                                <p class="text-xs text-slate-500 mt-1">Pengelolaan status publikasi, pengeditan naskah, dan penghapusan tulisan.</p>
+                            </div>
+                            <button onclick="openSubmitModal()" class="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition">
+                                <i class="fa-solid fa-plus mr-1"></i> Tambah Karya Baru
+                            </button>
+                        </div>
+
+                        <!-- CMS Filters -->
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <select id="cms-filter-status" onchange="renderCmsTable()" class="px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="all">Semua Status</option>
+                                    <option value="published">Diterbitkan (Published)</option>
+                                    <option value="pending">Menunggu Kurasi</option>
+                                    <option value="revision">Perlu Revisi</option>
+                                    <option value="rejected">Ditolak</option>
+                                </select>
+                                <select id="cms-filter-category" onchange="renderCmsTable()" class="px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="all">Semua Kategori</option>
+                                    <option value="Fiksi">Fiksi</option>
+                                    <option value="Non-Fiksi">Non-Fiksi</option>
+                                </select>
+                            </div>
+                            <input type="text" id="cms-search" onkeyup="renderCmsTable()" placeholder="Cari karya..." class="px-3.5 py-1.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52">
+                        </div>
+
+                        <!-- CMS Table -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm text-slate-600">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th class="px-6 py-4">Judul & Penulis</th>
+                                            <th class="px-6 py-4">Kategori</th>
+                                            <th class="px-6 py-4">Lampiran Berkas</th>
+                                            <th class="px-6 py-4">Status</th>
+                                            <th class="px-6 py-4 text-center">Pilihan Unggulan</th>
+                                            <th class="px-6 py-4 text-right">Opsi Pengelolaan</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="cms-tbody" class="divide-y divide-slate-100">
+                                        <!-- Dynamic CMS Rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================================= -->
+                    <!-- TAB 4: MANAJEMEN ANGGOTA          -->
+                    <!-- ================================= -->
+                    <div id="admin-tab-members" class="hidden space-y-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                            <div>
+                                <h1 class="text-2xl font-serif font-bold text-slate-900">Manajemen Anggota (User Management)</h1>
+                                <p class="text-xs text-slate-500 mt-1">Kelola data anggota terdaftar, status akun, dan riwayat kontribusi.</p>
+                            </div>
+                            <button onclick="openAddMemberModal()" class="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition">
+                                <i class="fa-solid fa-user-plus mr-1"></i> Tambah Anggota
+                            </button>
+                        </div>
+
+                        <!-- Members Table -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                                <h3 class="font-bold text-slate-900 text-base">Daftar Kontributor & Penulis</h3>
+                                <span id="members-count-badge" class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">4 Anggota</span>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm text-slate-600">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th class="px-6 py-4">Anggota</th>
+                                            <th class="px-6 py-4">Email</th>
+                                            <th class="px-6 py-4">Gelar / Lencana</th>
+                                            <th class="px-6 py-4 text-center">Total Karya</th>
+                                            <th class="px-6 py-4">Status Akun</th>
+                                            <th class="px-6 py-4 text-right">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="members-tbody" class="divide-y divide-slate-100">
+                                        <!-- Dynamic Members Rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================================= -->
+                    <!-- TAB 5: PENGATURAN KATEGORI & PANDUAN -->
+                    <!-- ================================= -->
+                    <div id="admin-tab-settings" class="hidden space-y-6">
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                            <h1 class="text-2xl font-serif font-bold text-slate-900">Pengaturan Kategori, Panduan & Keamanan</h1>
+                            <p class="text-xs text-slate-500 mt-1">Tambah kategori tulisan baru, perbarui panduan kurasi, dan ganti kata sandi akses admin.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Left Column: Manage Categories & Security -->
+                            <div class="space-y-6">
+                                <!-- Manage Categories -->
+                                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                                    <h3 class="font-bold text-slate-900 text-base border-b border-slate-100 pb-3">Manajemen Kategori Karya</h3>
+                                    
+                                    <!-- Add New Category Form -->
+                                    <form onsubmit="handleAddNewCategory(event)" class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                        <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Tambah Kategori Baru</h4>
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Ragam Utama</label>
+                                                <select id="new-cat-main" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                                                    <option value="Fiksi">Fiksi</option>
+                                                    <option value="Non-Fiksi">Non-Fiksi</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Nama Subkategori</label>
+                                                <input type="text" id="new-cat-sub" required placeholder="Contoh: Resensi Buku / Opini" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                            </div>
+                                        </div>
+                                        <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition">
+                                            <i class="fa-solid fa-plus mr-1"></i> Simpan Kategori Baru
+                                        </button>
+                                    </form>
+
+                                    <!-- Categories List -->
+                                    <div class="space-y-2">
+                                        <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Daftar Kategori Aktif</h4>
+                                        <div id="categories-list-container" class="space-y-2">
+                                            <!-- Dynamic categories -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Change Admin Password Box -->
+                                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                                    <h3 class="font-bold text-slate-900 text-base border-b border-slate-100 pb-3 flex items-center space-x-2">
+                                        <i class="fa-solid fa-key text-indigo-600"></i>
+                                        <span>Keamanan & Kata Sandi Admin</span>
+                                    </h3>
+
+                                    <form onsubmit="handleChangePassword(event)" class="space-y-3">
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-700 mb-1">Kata Sandi Baru</label>
+                                            <input type="password" id="setting-new-password" required minlength="4" placeholder="Masukkan sandi baru..." class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-700 mb-1">Konfirmasi Kata Sandi Baru</label>
+                                            <input type="password" id="setting-confirm-password" required minlength="4" placeholder="Ulangi sandi baru..." class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                        </div>
+                                        <button type="submit" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition shadow-sm">
+                                            <i class="fa-solid fa-shield-halved mr-1.5"></i> Perbarui Kata Sandi Admin
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Right Column: Update Guidelines -->
+                            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                                <h3 class="font-bold text-slate-900 text-base border-b border-slate-100 pb-3">Editor Teks Panduan Kurasi</h3>
+                                
+                                <form onsubmit="handleSaveGuidelines(event)" class="space-y-4">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Teks Panduan Berkontribusi (Tampil di Halaman Depan)</label>
+                                        <textarea id="setting-guidelines-text" rows="6" class="w-full p-3 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-serif"></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Penjelasan Langkah 3 (Proses Kurasi Admin)</label>
+                                        <input type="text" id="setting-step3-text" class="w-full p-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    </div>
+
+                                    <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-sm">
+                                        <i class="fa-solid fa-floppy-disk mr-1.5"></i> Perbarui Teks Panduan
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- FOOTER PUBLIK -->
+    <footer id="public-footer" class="bg-slate-900 text-slate-400 text-xs border-t border-slate-800 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div class="space-y-3">
+                <div class="flex items-center space-x-2 text-white">
+                    <i class="fa-solid fa-book-open-reader text-indigo-400 text-lg"></i>
+                    <span class="font-bold text-base font-serif">Kreasi Literasi Digital</span>
+                </div>
+                <p class="leading-relaxed">Platform wadah berekspresi, berbagi inspirasi, dan memajukan literasi digital peradaban bangsa.</p>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-3 uppercase tracking-wider">Kategori</h4>
+                <ul class="space-y-2">
+                    <li><a href="#kategori" class="hover:text-white transition">Keagamaan</a></li>
+                    <li><a href="#kategori" class="hover:text-white transition">Karya Kreatif</a></li>
+                    <li><a href="#kategori" class="hover:text-white transition">Edukasi & Opini</a></li>
+                    <li><a href="#kategori" class="hover:text-white transition">Budaya, Lingkungan & Teknologi</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-3 uppercase tracking-wider">Tautan Cepat</h4>
+                <ul class="space-y-2">
+                    <li><a href="#alur" class="hover:text-white transition">Panduan Kurasi</a></li>
+                    <li><a href="#" onclick="openSubmitModal()" class="hover:text-white transition">Formulir Kirim Karya</a></li>
+                    <li><a href="#ajakan" class="hover:text-white transition">Tentang Kami</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-3 uppercase tracking-wider">Kontak Redaksi</h4>
+                <p>Email: kurasi@kreasiliterasidigital.id</p>
+                <p class="mt-1">Jakarta, Indonesia</p>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-800 text-center text-slate-500">
+            &copy; 2026 Kreasi Literasi Digital Platform. Seluruh Hak Cipta Dilindungi.
+        </div>
+    </footer>
+
+    <!-- ========================================== -->
+    <!-- MODAL 1: FORMULIR KIRIM KARYA (PUBLIC)     -->
+    <!-- ========================================== -->
+    <div id="modal-submit" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <button onclick="closeSubmitModal()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 text-lg w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="mb-6">
+                <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">Formulir Pengajuan</span>
+                <h3 class="text-2xl font-serif font-bold text-slate-900">Kirim Karya Naskah Anda</h3>
+                <p class="text-xs text-slate-500 mt-1">Karya yang dikirimkan dapat berupa teks langsung maupun berkas dokumen PDF/Word.</p>
+            </div>
+
+            <form id="form-submit-work" onsubmit="handleWorkSubmission(event)" class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Penulis *</label>
+                        <input type="text" id="input-author" required placeholder="Contoh: Rian Hidayat" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Email Penulis *</label>
+                        <input type="email" id="input-email" required placeholder="rian@example.com" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Judul Karya *</label>
+                        <input type="text" id="input-title" required placeholder="Judul tulisan..." class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Kategori & Jenis *</label>
+                        <select id="input-category" required class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                </div>
+
+                <!-- DRAG & DROP UPLOAD DOKUMEN BERKAS -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Unggah Berkas Naskah (PDF / DOC / DOCX / TXT)</label>
+                    <div id="drop-zone" class="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-4 text-center cursor-pointer transition bg-slate-50 hover:bg-indigo-50/40 relative">
+                        <input type="file" id="input-file" accept=".pdf,.doc,.docx,.txt" onchange="handleFileSelect(this.files)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                        
+                        <div id="upload-prompt" class="space-y-2">
+                            <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
+                                <i class="fa-solid fa-file-arrow-up text-lg"></i>
+                            </div>
+                            <div class="text-xs text-slate-600">
+                                <span class="font-bold text-indigo-600">Klik untuk jelajah file</span> atau tarik & lepaskan dokumen di sini
+                            </div>
+                            <p class="text-[11px] text-slate-400">Format yang didukung: PDF, DOC, DOCX, TXT (Maksimum 10MB)</p>
+                        </div>
+
+                        <!-- Preview Berkas Terpilih -->
+                        <div id="file-preview-card" class="hidden flex items-center justify-between bg-white p-3 rounded-xl border border-indigo-200 shadow-sm text-left">
+                            <div class="flex items-center space-x-3 overflow-hidden">
+                                <div id="file-icon-box" class="w-9 h-9 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold shrink-0">
+                                    <i class="fa-solid fa-file-pdf"></i>
+                                </div>
+                                <div class="truncate">
+                                    <h5 id="file-name-display" class="text-xs font-bold text-slate-800 truncate">naskah_karya.pdf</h5>
+                                    <p id="file-size-display" class="text-[10px] text-slate-400">2.4 MB</p>
+                                </div>
+                            </div>
+                            <button type="button" onclick="removeSelectedFile(event)" class="text-slate-400 hover:text-red-500 p-1 rounded-lg">
+                                <i class="fa-solid fa-trash-can text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Ringkasan / Abstrak (Max 2 kalimat) *</label>
+                    <input type="text" id="input-summary" required placeholder="Gambaran singkat isi karya..." class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Isi / Pengantar Naskah (Opsional jika mengunggah dokumen)</label>
+                    <textarea id="input-content" rows="4" placeholder="Tuliskan naskah lengkap atau pengantar naskah dokumen Anda di sini..." class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="pt-2 flex items-center justify-end space-x-3">
+                    <button type="button" onclick="closeSubmitModal()" class="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Batal</button>
+                    <button type="submit" class="px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-md flex items-center space-x-2">
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                        <span>Kirimkan Naskah</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL 5: LOGIN AUTENTIKASI ADMIN (AUTHENTICATION LOCK) -->
+    <!-- ========================================== -->
+    <div id="modal-admin-login" class="fixed inset-0 z-50 hidden bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative text-center">
+            <button onclick="closeAdminLoginModal()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 text-lg w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-100 shadow-sm">
+                <i class="fa-solid fa-lock text-2xl"></i>
+            </div>
+
+            <h3 class="text-2xl font-serif font-bold text-slate-900">Autentikasi Kurator</h3>
+            <p class="text-xs text-slate-500 mt-1 mb-6">Masukkan kata sandi administrator untuk mengakses Dasbor Admin & Ruang Kurasi.</p>
+
+            <form onsubmit="handleAdminLoginSubmit(event)" class="space-y-4 text-left">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Kata Sandi Akses</label>
+                    <div class="relative">
+                        <input type="password" id="admin-login-password" required placeholder="Sandi default: admin123" class="w-full pl-3.5 pr-10 py-3 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                        <button type="button" onclick="togglePasswordVisibility('admin-login-password', 'toggle-eye-icon')" class="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600">
+                            <i id="toggle-eye-icon" class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                    <p id="admin-login-error" class="text-xs text-red-500 mt-1.5 hidden font-semibold flex items-center space-x-1">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>Kata sandi salah! Silakan coba lagi.</span>
+                    </p>
+                </div>
+
+                <div class="bg-indigo-50/70 p-3 rounded-xl border border-indigo-100 text-[11px] text-indigo-800 flex items-start space-x-2">
+                    <i class="fa-solid fa-circle-info text-indigo-500 text-xs mt-0.5"></i>
+                    <span>Kata sandi standar simulasi saat ini: <strong class="font-bold underline">admin123</strong></span>
+                </div>
+
+                <button type="submit" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition shadow-md flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-key text-xs"></i>
+                    <span>Masuk ke Dasbor Admin</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL 2: LEMBAR PRATINJAU & KURASI NASKAH (ADMIN) -->
+    <!-- ========================================== -->
+    <div id="modal-curate" class="fixed inset-0 z-50 hidden bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative max-h-[92vh] flex flex-col justify-between">
+            <button onclick="closeCurateModal()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 text-lg w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <!-- Header Modal -->
+            <div class="border-b border-slate-100 pb-4 pr-10">
+                <div class="flex items-center space-x-2 mb-1">
+                    <span id="curate-modal-category" class="px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-xs font-bold uppercase"></span>
+                    <span id="curate-modal-date" class="text-xs text-slate-400"></span>
+                </div>
+                <h3 id="curate-modal-title" class="text-2xl font-serif font-bold text-slate-900"></h3>
+                <p class="text-xs text-slate-500 mt-1">Penulis: <strong id="curate-modal-author" class="text-slate-800"></strong></p>
+            </div>
+
+            <!-- Lampiran Berkas Banner (jika ada upload file) -->
+            <div id="curate-file-box" class="hidden my-3 p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div id="curate-file-icon" class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </div>
+                    <div>
+                        <div id="curate-file-name" class="text-xs font-bold text-slate-800">naskah_karya.pdf</div>
+                        <div id="curate-file-size" class="text-[10px] text-slate-500">2.4 MB • Berkas Terlampir</div>
+                    </div>
+                </div>
+                <button id="curate-file-download-btn" onclick="downloadAttachment()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition flex items-center space-x-1">
+                    <i class="fa-solid fa-download text-xs"></i>
+                    <span>Unduh / Buka Dokumen</span>
+                </button>
+            </div>
+
+            <!-- Body Reader / Pratinjau Teks -->
+            <div class="my-2 p-4 sm:p-6 bg-slate-50 rounded-2xl border border-slate-200 overflow-y-auto max-h-56 custom-scrollbar">
+                <p id="curate-modal-body" class="text-xs sm:text-sm text-slate-700 leading-relaxed font-serif whitespace-pre-line"></p>
+            </div>
+
+            <!-- Feedback & Action Footer -->
+            <div class="space-y-4 pt-2 border-t border-slate-100">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Catatan Kurator / Feedback Penulis (Opsional)</label>
+                    <textarea id="curate-feedback-notes" rows="2" placeholder="Tuliskan saran perbaikan PUEBI, revisi judul, atau alasan penolakan..." class="w-full p-3 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <button type="button" onclick="closeCurateModal()" class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+                        Batal
+                    </button>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="processCuration('rejected')" class="px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition">
+                            <i class="fa-solid fa-circle-xmark mr-1"></i> Tolak Naskah
+                        </button>
+                        <button type="button" onclick="processCuration('revision')" class="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition">
+                            <i class="fa-solid fa-rotate-left mr-1"></i> Minta Revisi
+                        </button>
+                        <button type="button" onclick="processCuration('published')" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md transition">
+                            <i class="fa-solid fa-circle-check mr-1"></i> Terima & Terbitkan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL 3: EDIT NASKAH (CMS ADMIN)           -->
+    <!-- ========================================== -->
+    <div id="modal-edit-work" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <button onclick="closeEditWorkModal()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 text-lg w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="mb-6">
+                <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">CMS Redaksi</span>
+                <h3 class="text-2xl font-serif font-bold text-slate-900">Edit Data Naskah</h3>
+            </div>
+
+            <form onsubmit="handleSaveEditWork(event)" class="space-y-4">
+                <input type="hidden" id="edit-work-id">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Judul Karya *</label>
+                        <input type="text" id="edit-work-title" required class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Status Publikasi *</label>
+                        <select id="edit-work-status" class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
+                            <option value="published">Diterbitkan (Published)</option>
+                            <option value="pending">Menunggu Kurasi</option>
+                            <option value="revision">Perlu Revisi</option>
+                            <option value="rejected">Ditolak</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Ringkasan / Abstrak *</label>
+                    <input type="text" id="edit-work-summary" required class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Isi Lengkap Naskah *</label>
+                    <textarea id="edit-work-content" rows="6" required class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="pt-2 flex items-center justify-end space-x-3">
+                    <button type="button" onclick="closeEditWorkModal()" class="px-5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Batal</button>
+                    <button type="submit" class="px-6 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-md">Simpan Perubahan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL 4: TAMBAH ANGGOTA BARU (ADMIN)      -->
+    <!-- ========================================== -->
+    <div id="modal-add-member" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative">
+            <button onclick="closeAddMemberModal()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 text-lg w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="mb-6">
+                <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">Manajemen User</span>
+                <h3 class="text-xl font-serif font-bold text-slate-900">Tambah Anggota Baru</h3>
+            </div>
+
+            <form onsubmit="handleAddMemberSubmit(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Lengkap *</label>
+                    <input type="text" id="add-member-name" required placeholder="Contoh: Rian Hidayat" class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Email *</label>
+                    <input type="email" id="add-member-email" required placeholder="rian@example.com" class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Gelar / Lencana Kontributor *</label>
+                    <input type="text" id="add-member-badge" required placeholder="Contoh: Penulis Opini / Penyair" class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div class="pt-2 flex items-center justify-end space-x-3">
+                    <button type="button" onclick="closeAddMemberModal()" class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Batal</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition shadow-md">Daftarkan Anggota</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL PENDAFTARAN ANGGOTA DIKSI             -->
+    <!-- ========================================== -->
+    <div id="modal-register-member" class="fixed inset-0 z-[60] hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative">
+            <button type="button" onclick="closeRegisterMemberModal()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-700 w-9 h-9 rounded-full bg-slate-100"><i class="fa-solid fa-xmark"></i></button>
+            <div class="mb-6">
+                <span class="text-xs font-bold text-emerald-700 uppercase tracking-wider">Digital Kreasi Literasi</span>
+                <h3 class="text-2xl font-serif font-bold text-slate-900 mt-1">Daftar Anggota</h3>
+                <p class="text-xs text-slate-500 mt-2">Bergabunglah dan jadilah bagian dari komunitas literasi DIKSI.</p>
+            </div>
+            <form id="form-register-member" onsubmit="handlePublicMemberRegistration(event)" class="space-y-4">
+                <div>
+                    <label for="register-member-name" class="block text-xs font-semibold text-slate-700 mb-1">Nama lengkap *</label>
+                    <input id="register-member-name" type="text" required maxlength="80" autocomplete="name" placeholder="Masukkan nama lengkap" class="w-full px-3.5 py-3 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label for="register-member-username" class="block text-xs font-semibold text-slate-700 mb-1">Username *</label>
+                    <input id="register-member-username" type="text" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" autocomplete="username" placeholder="Contoh: penulis_diksi" class="w-full px-3.5 py-3 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    <p class="text-[10px] text-slate-400 mt-1">Gunakan huruf, angka, atau garis bawah tanpa spasi.</p>
+                </div>
+                <div>
+                    <label for="register-member-email" class="block text-xs font-semibold text-slate-700 mb-1">Email aktif *</label>
+                    <input id="register-member-email" type="email" required maxlength="120" autocomplete="email" placeholder="nama@email.com" class="w-full px-3.5 py-3 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label for="register-member-role" class="block text-xs font-semibold text-slate-700 mb-1">Bergabung sebagai *</label>
+                    <select id="register-member-role" required class="w-full px-3.5 py-3 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <option value="Penulis dan Pembaca">Penulis dan Pembaca</option>
+                        <option value="Penulis">Penulis</option>
+                        <option value="Pembaca">Pembaca</option>
+                    </select>
+                </div>
+                <p class="text-[10px] leading-relaxed text-slate-500">Dengan mendaftar, Anda menyetujui data ini digunakan untuk administrasi keanggotaan DIKSI.</p>
+                <div class="flex gap-3 pt-1">
+                    <button type="button" onclick="closeRegisterMemberModal()" class="flex-1 px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50">Batal</button>
+                    <button type="submit" class="flex-1 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md"><i class="fa-solid fa-user-plus mr-1"></i> Daftar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- JAVASCRIPT LOGIC SYSTEM & DATA SIMULATION  -->
+    <!-- ========================================== -->
+    <script>
+        // AUTHENTICATION STATE
+        let isAdminLoggedIn = false;
+        let adminPasswordCurrent = '';
+        let currentUploadedFile = null; // Menyimpan objek berkas yang sedang dipilih
+
+        // DATA STATE INITIALIZATION
+        let worksState = [
+            {
+                id: 'k1',
+                title: 'Jejak Piksel di Kota Tua',
+                author: 'Siti Rahmawati',
+                email: 'siti@example.com',
+                category: 'Karya Kreatif',
+                subcategory: 'Cerpen',
+                summary: 'Kisah pertemuan dua perancang arsitektur digital di tengah nostalgia lorong kota bersejarah.',
+                content: 'Di antara dinding cagar budaya yang lapuk dan hembusan angin sore, Bayu menggenggam gawai tablet miliknya. Kota tua ini tak lagi sekadar batuan bata tua, melainkan hamparan augmented reality yang memancarkan kenangan masa lalu. Siti datang membawa secangkir kopi panas...',
+                file: { name: 'Jejak_Piksel_Kota_Tua.pdf', size: '1.2 MB', dataUrl: null },
+                status: 'published', // 'published', 'pending', 'revision', 'rejected'
+                featured: true,
+                date: '01 Nov 2026',
+                reads: 420,
+                curatorNote: 'Alur sangat bagus, estetika bahasa kuat.'
+            },
+            {
+                id: 'k2',
+                title: 'Kedaulatan Data Bagi Generasi Z',
+                author: 'Ahmad Fauzi',
+                email: 'fauzi@example.com',
+                category: 'Teknologi',
+                subcategory: 'Literasi digital',
+                summary: 'Panduan pragmatis memproteksi jejak rekam digital dan identitas pribadi di era AI.',
+                content: 'Pencurian identitas digital bukan lagi cerita fiksi ilmiah. Di era otomasi cerdas, setiap ketukan jari kita memancarkan pola data berharga. Artikel ini membahas 5 pilar utama bagi pemuda dalam menjaga privasi internet tanpa mengisolasi diri dari jaringan global...',
+                file: { name: 'Kedaulatan_Data_GenZ.docx', size: '450 KB', dataUrl: null },
+                status: 'published',
+                featured: true,
+                date: '28 Okt 2026',
+                reads: 610,
+                curatorNote: 'Sangat informatif dan relevan.'
+            },
+            {
+                id: 'k3',
+                title: 'Seruling Angin di Lembah Pengetahuan',
+                author: 'Dewi Lestari M.',
+                email: 'dewi@example.com',
+                category: 'Karya Kreatif',
+                subcategory: 'Puisi',
+                summary: 'Bait-bait puisi tentang pencarian ilmu di era transformasi serba cepat.',
+                content: 'Angin berbisik di sela jemari / Membawa kode yang tak tertulis / Kami mengejar bayang pengetahuan / Di antara layar terang dan mimpi yang tak pernah habis...',
+                file: null,
+                status: 'published',
+                featured: true,
+                date: '25 Okt 2026',
+                reads: 380,
+                curatorNote: 'Pilihan kata sarat makna.'
+            },
+            {
+                id: 'k4',
+                title: 'Memanusiakan Teknologi di Ruang Kelas',
+                author: 'Budi Santoso',
+                email: 'budi@example.com',
+                category: 'Pengalaman',
+                subcategory: 'Kisah inspiratif',
+                summary: 'Catatan pengabdian seorang guru pelosok dalam menghadirkan pustaka digital sederhana.',
+                content: 'Tanpa sinyal 4G yang stabil, Pak Budi merakit server lokal bertenaga surya. Dalam kotak kayu kecil itu, ribuan buku e-book tersimpan untuk anak-anak desa...',
+                file: null,
+                status: 'published',
+                featured: false,
+                date: '20 Okt 2026',
+                reads: 290,
+                curatorNote: ''
+            },
+            {
+                id: 'k5',
+                title: 'Humor Cerdas: Bug Pertama Dalam Hidupku',
+                author: 'Aris Setiawan',
+                email: 'aris@example.com',
+                category: 'Karya Kreatif',
+                subcategory: 'Humor mendidik',
+                summary: 'Pengalaman menggelikan seorang programmer pemula yang salah mengartikan sintaks kehidupan.',
+                content: 'Saya kira "Coffee" adalah variabel tetap. Ternyata begitu saya lupa meminumnya, sistem kerja otak saya langsung memberikan respon Error 500 Internal Server Error...',
+                file: { name: 'Bug_Pertama_Dalam_Hidupku.pdf', size: '850 KB', dataUrl: null },
+                status: 'pending',
+                featured: false,
+                date: '02 Nov 2026',
+                reads: 0,
+                curatorNote: ''
+            },
+            {
+                id: 'k6',
+                title: 'Etika Komunikasi di Media Sosial Modern',
+                author: 'Nadia Putri',
+                email: 'nadia@example.com',
+                category: 'Teknologi',
+                subcategory: 'Keamanan digital',
+                summary: 'Mengapa kehati-hatian berpendapat adalah cermin kecerdasan literasi masa kini.',
+                content: 'Kata-kata di internet tidak lenyap saat kita menutup aplikasi. Tulisan kita meninggalkan jejak permanen. Mari membangun budaya apresiatif ketimbang destruktif...',
+                file: { name: 'Etika_Medsos_Modern.docx', size: '1.8 MB', dataUrl: null },
+                status: 'pending',
+                featured: false,
+                date: '02 Nov 2026',
+                reads: 0,
+                curatorNote: ''
+            }
+        ];
+
+        const DIKSI_MEMBERS_STORAGE_KEY = 'diksi_members_v1';
+        const defaultMembersState = [
+            { id: 'm1', name: 'Siti Rahmawati', email: 'siti@example.com', badge: 'Kurator Favorite', avatarColor: 'bg-indigo-600', status: 'Aktif', username: 'siti_rahmawati', role: 'Penulis dan Pembaca' },
+            { id: 'm2', name: 'Ahmad Fauzi', email: 'fauzi@example.com', badge: 'Penulis Esai Terbaik', avatarColor: 'bg-emerald-600', status: 'Aktif', username: 'ahmad_fauzi', role: 'Penulis' },
+            { id: 'm3', name: 'Dewi Lestari M.', email: 'dewi@example.com', badge: 'Penyair Digital', avatarColor: 'bg-purple-600', status: 'Aktif', username: 'dewi_lestari', role: 'Penulis' },
+            { id: 'm4', name: 'Budi Santoso', email: 'budi@example.com', badge: 'Inspirator Komunitas', avatarColor: 'bg-amber-600', status: 'Aktif', username: 'budi_santoso', role: 'Penulis dan Pembaca' }
+        ];
+        function loadDiksiMembers() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(DIKSI_MEMBERS_STORAGE_KEY) || 'null');
+                return Array.isArray(saved) ? saved : defaultMembersState;
+            } catch (error) { return defaultMembersState; }
+        }
+        let membersState = loadDiksiMembers();
+        function saveDiksiMembers() {
+            try { localStorage.setItem(DIKSI_MEMBERS_STORAGE_KEY, JSON.stringify(membersState)); }
+            catch (error) { console.warn('Data anggota tidak dapat disimpan di browser ini.', error); }
+        }
+
+        let categoriesState = [
+            { id: 'c1', main: 'Keagamaan', sub: 'Teks khutbah, ceramah, kajian keagamaan, refleksi spiritual', active: true },
+            { id: 'c2', main: 'Karya Kreatif', sub: 'Puisi, cerpen, dongeng, komik strip, naskah drama, humor mendidik', active: true },
+            { id: 'c3', main: 'Edukasi', sub: 'Artikel edukatif, kiat-kiat menarik, tips belajar, karya ilmiah populer', active: true },
+            { id: 'c4', main: 'Opini & Refleksi', sub: 'Artikel opini, esai, refleksi diri, jurnal harian', active: true },
+            { id: 'c5', main: 'Reviu', sub: 'Resensi buku, ulasan film, musik, atau media sosial', active: true },
+            { id: 'c6', main: 'Pengalaman', sub: 'Tulisan pengalaman, travelog, kisah inspiratif, wawancara', active: true },
+            { id: 'c7', main: 'Budaya & Lingkungan', sub: 'Kebudayaan, kearifan lokal, lingkungan hidup', active: true },
+            { id: 'c8', main: 'Teknologi', sub: 'Literasi digital, teknologi, keamanan digital, penggunaan AI', active: true }
+        ];
+
+        let activeCuratingWorkId = null;
+
+        // INITIAL ONLOAD RENDER
+        window.onload = function() {
+            populateCategoryDropdown();
+            renderPublicView();
+            renderAdminView();
+            initDragAndDrop();
+            diksiRefreshFromSheets(false);
+            
+            // Set Initial Guideline Input
+            document.getElementById('setting-guidelines-text').value = document.getElementById('public-guideline-text').innerText.replace(/"/g, '');
+            document.getElementById('setting-step3-text').value = document.getElementById('guide-step-3-text').innerText;
+        };
+
+        // DRAG & DROP & UPLOAD HANDLERS
+        function initDragAndDrop() {
+            const dropZone = document.getElementById('drop-zone');
+            if (!dropZone) return;
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('border-indigo-600', 'bg-indigo-100/50');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.remove('border-indigo-600', 'bg-indigo-100/50');
+                }, false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                handleFileSelect(files);
+            }, false);
+        }
+
+        function handleFileSelect(files) {
+            if (!files || files.length === 0) return;
+            const file = files[0];
+            const allowedExts = ['pdf', 'doc', 'docx', 'txt'];
+            const fileExt = file.name.split('.').pop().toLowerCase();
+
+            if (!allowedExts.includes(fileExt)) {
+                alert("Format berkas tidak didukung! Harap unggah file PDF, DOC, DOCX, atau TXT.");
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) { // Maks 10MB
+                alert("Ukuran berkas melebihi batas 10MB.");
+                return;
+            }
+
+            // Membaca file menggunakan FileReader
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentUploadedFile = {
+                    name: file.name,
+                    size: formatBytes(file.size),
+                    ext: fileExt,
+                    dataUrl: e.target.result
+                };
+                displayFilePreview(currentUploadedFile);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function displayFilePreview(fileObj) {
+            document.getElementById('upload-prompt').classList.add('hidden');
+            const previewCard = document.getElementById('file-preview-card');
+            previewCard.classList.remove('hidden');
+
+            document.getElementById('file-name-display').innerText = fileObj.name;
+            document.getElementById('file-size-display').innerText = fileObj.size;
+
+            const iconBox = document.getElementById('file-icon-box');
+            if (fileObj.ext === 'pdf') {
+                iconBox.className = "w-9 h-9 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold shrink-0";
+                iconBox.innerHTML = `<i class="fa-solid fa-file-pdf"></i>`;
+            } else if (['doc', 'docx'].includes(fileObj.ext)) {
+                iconBox.className = "w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold shrink-0";
+                iconBox.innerHTML = `<i class="fa-solid fa-file-word"></i>`;
+            } else {
+                iconBox.className = "w-9 h-9 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center font-bold shrink-0";
+                iconBox.innerHTML = `<i class="fa-solid fa-file-lines"></i>`;
+            }
+        }
+
+        function removeSelectedFile(e) {
+            e.stopPropagation();
+            currentUploadedFile = null;
+            document.getElementById('input-file').value = '';
+            document.getElementById('file-preview-card').classList.add('hidden');
+            document.getElementById('upload-prompt').classList.remove('hidden');
+        }
+
+        function formatBytes(bytes, decimals = 1) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        // POPULATE CATEGORIES INTO SELECT OPTIONS
+        function populateCategoryDropdown() {
+            const select = document.getElementById('input-category');
+            const activeCategories = categoriesState.filter(c => c.active);
+            select.innerHTML = activeCategories.map(c => {
+                const jenis = c.sub.split(',').map(item => item.trim()).filter(Boolean);
+                return jenis.map(item => `
+                    <option value="${c.main} - ${item}">${c.main}: ${item}</option>
+                `).join('');
+            }).join('');
+        }
+
+        // REQUEST ADMIN ACCESS & AUTHENTICATION
+        function requestAdminAccess() {
+            if (isAdminLoggedIn) {
+                switchView('admin');
+            } else {
+                openAdminLoginModal();
+            }
+        }
+
+        function openAdminLoginModal() {
+            document.getElementById('admin-login-password').value = '';
+            document.getElementById('admin-login-error').classList.add('hidden');
+            document.getElementById('modal-admin-login').classList.remove('hidden');
+        }
+
+        function closeAdminLoginModal() {
+            document.getElementById('modal-admin-login').classList.add('hidden');
+        }
+
+        function togglePasswordVisibility(inputId, iconId) {
+            const input = document.getElementById(inputId);
+            const icon = document.getElementById(iconId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        }
+
+        async function handleAdminLoginSubmit(e) {
+            e.preventDefault();
+            const inputPass = document.getElementById('admin-login-password').value;
+            const errorMsg = document.getElementById('admin-login-error');
+            try {
+                const result = await diksiJsonp({action:'adminLogin', pin:inputPass});
+                if (result && result.ok) {
+                    isAdminLoggedIn = true;
+                    window.diksiAdminPin = inputPass;
+                    closeAdminLoginModal();
+                    await diksiRefreshFromSheets(false);
+                    showToast('Akses Diberikan', 'Autentikasi admin berhasil.');
+                    switchView('admin');
+                } else errorMsg.classList.remove('hidden');
+            } catch(err) { errorMsg.classList.remove('hidden'); }
+        }
+
+        function logoutAdmin() {
+            isAdminLoggedIn = false;
+            showToast("Logged Out", "Anda telah keluar dari Dasbor Admin.");
+            switchView('public');
+        }
+
+        function handleChangePassword(e) {
+            e.preventDefault();
+            const newPass = document.getElementById('setting-new-password').value;
+            const confirmPass = document.getElementById('setting-confirm-password').value;
+
+            if (newPass !== confirmPass) {
+                alert("Konfirmasi kata sandi baru tidak cocok!");
+                return;
+            }
+
+            adminPasswordCurrent = newPass;
+            document.getElementById('setting-new-password').value = '';
+            document.getElementById('setting-confirm-password').value = '';
+            showToast("Sandi Diperbarui", "Kata sandi akses admin berhasil diganti.");
+        }
+
+        // VIEW SWITCHING SYSTEM (PUBLIC vs ADMIN)
+        function switchView(view) {
+            const publicView = document.getElementById('view-public');
+            const adminView = document.getElementById('view-admin');
+            const publicFooter = document.getElementById('public-footer');
+            const btnPublic = document.getElementById('btn-mode-public');
+            const btnAdmin = document.getElementById('btn-mode-admin');
+
+            if (view === 'admin') {
+                if (!isAdminLoggedIn) {
+                    openAdminLoginModal();
+                    return;
+                }
+                publicView.classList.add('hidden');
+                publicFooter.classList.add('hidden');
+                adminView.classList.remove('hidden');
+                
+                btnAdmin.className = "px-3 py-1.5 rounded-lg bg-white text-indigo-600 shadow-sm transition-all duration-200 flex items-center space-x-1.5 font-bold";
+                btnPublic.className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all duration-200 flex items-center space-x-1.5 font-normal";
+                renderAdminView();
+            } else {
+                adminView.classList.add('hidden');
+                publicView.classList.remove('hidden');
+                publicFooter.classList.remove('hidden');
+
+                btnPublic.className = "px-3 py-1.5 rounded-lg bg-white text-indigo-600 shadow-sm transition-all duration-200 flex items-center space-x-1.5 font-bold";
+                btnAdmin.className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all duration-200 flex items-center space-x-1.5 font-normal";
+                renderPublicView();
+            }
+        }
+
+        // ADMIN TAB SWITCHER
+        function switchAdminTab(tabName) {
+            const tabs = ['overview', 'curation', 'cms', 'members', 'settings'];
+            
+            tabs.forEach(t => {
+                const el = document.getElementById(`admin-tab-${t}`);
+                const btn = document.getElementById(`nav-tab-${t}`);
+                if (t === tabName) {
+                    el.classList.remove('hidden');
+                    if (btn) btn.className = "w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold shadow-sm transition";
+                } else {
+                    el.classList.add('hidden');
+                    if (btn) btn.className = "w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-slate-800 hover:text-white text-slate-300 transition";
+                }
+            });
+
+            if (tabName === 'overview') renderOverviewTab();
+            if (tabName === 'curation') renderCurationTable();
+            if (tabName === 'cms') renderCmsTable();
+            if (tabName === 'members') renderMembersTable();
+            if (tabName === 'settings') renderSettingsTab();
+        }
+
+        // RENDER PUBLIC HOME PAGE COMPONENTS
+        function renderCommunityStats() {
+            const memberCount = Array.isArray(membersState) ? membersState.length : 0;
+            const publishedWorkCount = Array.isArray(worksState)
+                ? worksState.filter(work => work.status === 'published').length
+                : 0;
+            const memberElement = document.getElementById('public-stat-members');
+            const workElement = document.getElementById('public-stat-works');
+            if (memberElement) memberElement.textContent = memberCount.toLocaleString('id-ID');
+            if (workElement) workElement.textContent = publishedWorkCount.toLocaleString('id-ID');
+        }
+
+        function renderPublicView() {
+            renderCommunityStats();
+            // 1. Featured Works
+            const featuredContainer = document.getElementById('featured-works-grid');
+            const featuredWorks = worksState.filter(w => w.status === 'published' && w.featured);
+            
+            featuredContainer.innerHTML = featuredWorks.map(work => `
+                <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 text-xs font-bold uppercase">${work.category} - ${work.subcategory}</span>
+                            <span class="text-xs text-slate-400"><i class="fa-regular fa-eye mr-1"></i>${work.reads}</span>
+                        </div>
+                        <h4 class="text-lg font-serif font-bold text-slate-900 mb-2 leading-snug">${work.title}</h4>
+                        <p class="text-xs text-slate-600 line-clamp-3 leading-relaxed mb-4">${work.summary}</p>
+                    </div>
+
+                    ${work.file ? `
+                    <div class="mb-4 p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                        <span class="font-semibold text-slate-700 truncate"><i class="fa-solid fa-file-pdf text-red-500 mr-1.5"></i>${work.file.name}</span>
+                        <span class="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-md">Dokumen</span>
+                    </div>
+                    ` : ''}
+
+                    <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <span class="text-xs font-medium text-slate-500">Oleh: <strong class="text-slate-800">${work.author}</strong></span>
+                        <span class="text-[11px] text-slate-400">${work.date}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            // 2. Pengelompokan kategori, filter, dan daftar karya terbit
+            activePublicCategory = 'all';
+            renderCategoryNavigation();
+            renderCategoryGrid('all');
+
+            // 3. Top Contributors List
+            const contributorsContainer = document.getElementById('top-contributors-list');
+            contributorsContainer.innerHTML = membersState.map((c, index) => {
+                const count = worksState.filter(w => w.author === c.name && w.status === 'published').length;
+                return `
+                    <div class="py-3.5 flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <span class="font-bold text-sm text-slate-400 w-4">${index + 1}</span>
+                            <div class="w-9 h-9 rounded-full ${c.avatarColor} text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                                ${c.name.charAt(0)}
+                            </div>
+                            <div>
+                                <h5 class="text-sm font-bold text-slate-900">${c.name}</h5>
+                                <span class="text-[11px] text-indigo-600 font-semibold">${c.badge}</span>
+                            </div>
+                        </div>
+                        <span class="text-xs font-semibold bg-slate-100 text-slate-700 px-3 py-1 rounded-full">${count} Karya</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // PENGATURAN KATEGORI PUBLIK: 8 KELOMPOK KARYA
+        let activePublicCategory = 'all';
+
+        function renderCategoryNavigation() {
+            const active = categoriesState.filter(c => c.active);
+            const taxonomy = document.getElementById('taxonomy-grid');
+            const buttons = document.getElementById('category-filter-buttons');
+            if (!taxonomy || !buttons) return;
+
+            taxonomy.innerHTML = active.map((c, index) => `
+                <button type="button" onclick="filterCategory(${JSON.stringify(c.main).replace(/"/g, '&quot;')})"
+                    class="text-left p-4 rounded-2xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 hover:border-cyan-400/60 transition">
+                    <span class="text-[10px] uppercase tracking-widest font-bold text-cyan-400">Kelompok ${index + 1}</span>
+                    <span class="block text-sm font-bold text-white mt-1">${c.main}</span>
+                    <span class="block text-[11px] text-slate-300 leading-relaxed mt-2">${c.sub}</span>
+                </button>
+            `).join('');
+
+            buttons.innerHTML = `
+                <button onclick="filterCategory('all')" class="cat-btn px-4 py-2 rounded-xl text-xs font-semibold transition ${activePublicCategory === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">Semua Karya</button>
+                ${active.map(c => `
+                    <button onclick="filterCategory(${JSON.stringify(c.main).replace(/"/g, '&quot;')})"
+                        class="cat-btn px-4 py-2 rounded-xl text-xs font-semibold transition ${activePublicCategory === c.main ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">${c.main}</button>
+                `).join('')}
+            `;
+        }
+
+        // FILTER KATEGORI DI HALAMAN PUBLIK
+        function filterCategory(cat) {
+            activePublicCategory = cat;
+            renderCategoryNavigation();
+            renderCategoryGrid(cat);
+        }
+
+        // LIKE & KOMENTAR PEMBACA (database bersama)
+        function getReaderData(key, fallback) {
+            try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+            catch (error) { return fallback; }
+        }
+        function diksiVisitorId() {
+            let id = localStorage.getItem('diksi_visitor_id');
+            if (!id) { id = 'visitor_' + Date.now() + '_' + Math.random().toString(36).slice(2); localStorage.setItem('diksi_visitor_id', id); }
+            return id;
+        }
+        async function toggleWorkLike(workId) {
+            await diksiSave('toggleLike', {workId, visitorId:diksiVisitorId()});
+        }
+        async function addWorkComment(workId) {
+            const input = document.getElementById('comment-input-' + workId);
+            const nameInput = document.getElementById('comment-name-' + workId);
+            const commentText = input ? input.value.trim() : '';
+            const readerName = nameInput ? nameInput.value.trim() : '';
+            if (!readerName || !commentText) { alert('Isi nama dan komentar terlebih dahulu.'); return; }
+            const ok = await diksiSave('addComment', {workId, name:readerName, text:commentText});
+            if (ok) showToast('Komentar Terkirim', 'Komentar tersimpan dan dapat dibaca pengunjung lain.');
+        }
+
+        function renderWorkFeedback(work) {
+            const visitorId = diksiVisitorId();
+            const likesData = diksiLikesState[work.id] || {count:0, visitors:[]};
+            const liked = (likesData.visitors || []).includes(visitorId);
+            const likes = likesData.count || 0;
+            const comments = diksiCommentsState[work.id] || [];
+            return `
+                <div class="mt-4 pt-3 border-t border-slate-700/70">
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="toggleWorkLike('${work.id}')"
+                            class="px-3 py-2 rounded-lg text-xs font-bold ${liked ? 'bg-pink-500/20 text-pink-300 border border-pink-400/40' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}">
+                            <i class="fa-${liked ? 'solid' : 'regular'} fa-heart mr-1"></i>${liked ? 'Disukai' : 'Like'} (${likes})
+                        </button>
+                        <span class="text-xs text-slate-400"><i class="fa-regular fa-comment mr-1"></i>${comments.length} komentar</span>
+                    </div>
+                    <details class="mt-3">
+                        <summary class="cursor-pointer text-xs font-semibold text-cyan-300 hover:text-cyan-200">Baca / tulis komentar</summary>
+                        <div class="mt-3 space-y-2">
+                            ${comments.length ? comments.map(c => `
+                                <div class="rounded-lg bg-slate-900/80 border border-slate-700 p-3">
+                                    <div class="text-xs font-bold text-white">${escapeReaderText(c.name)}</div>
+                                    <p class="text-xs text-slate-300 mt-1 whitespace-pre-wrap">${escapeReaderText(c.text)}</p>
+                                    <div class="text-[10px] text-slate-500 mt-1">${escapeReaderText(c.date || '')}</div>
+                                </div>`).join('') : '<p class="text-xs text-slate-400">Belum ada komentar. Jadilah pembaca pertama yang memberi tanggapan.</p>'}
+                            <input id="comment-name-${work.id}" type="text" maxlength="60" placeholder="Nama / nama pena"
+                                class="w-full rounded-lg bg-slate-900 border border-slate-600 text-white text-xs px-3 py-2">
+                            <textarea id="comment-input-${work.id}" maxlength="1000" rows="2" placeholder="Tulis komentar yang santun..."
+                                class="w-full rounded-lg bg-slate-900 border border-slate-600 text-white text-xs px-3 py-2"></textarea>
+                            <button type="button" onclick="addWorkComment('${work.id}')"
+                                class="px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold">
+                                <i class="fa-solid fa-paper-plane mr-1"></i>Kirim Komentar
+                            </button>
+                        </div>
+                    </details>
+                </div>`;
+        }
+
+        function escapeReaderText(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
+
+        function renderCategoryGrid(filter) {
+            const container = document.getElementById('published-works-grid');
+            let list = worksState.filter(w => w.status === 'published');
+            
+            if (filter !== 'all') {
+                list = list.filter(w => w.category === filter);
+            }
+
+            if (list.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-8 text-slate-400 text-xs">Belum ada karya diterbitkan pada kategori ini.</div>`;
+                return;
+            }
+
+            container.innerHTML = list.map(work => `
+                <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700 hover:border-indigo-500/50 transition flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold tracking-wider text-indigo-400 uppercase">${work.category} / ${work.subcategory}</span>
+                            ${work.file ? `<span class="text-[10px] text-emerald-400 font-mono"><i class="fa-solid fa-paperclip mr-1"></i>Berkas</span>` : ''}
+                        </div>
+                        <h4 class="text-base font-serif font-bold text-white mt-1 mb-2">${work.title}</h4>
+                        <p class="text-xs text-slate-300 leading-relaxed line-clamp-2">${work.summary}</p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-400">
+                        <span>Penulis: ${work.author}</span>
+                        <span>${work.date}</span>
+                    </div>
+                    ${renderWorkFeedback(work)}
+                </div>
+            `).join('');
+        }
+
+        // RENDER ADMIN DASHBOARD
+        function renderAdminView() {
+            renderCommunityStats();
+            renderOverviewTab();
+            renderCurationTable();
+            renderCmsTable();
+            renderMembersTable();
+            renderSettingsTab();
+        }
+
+        function renderOverviewTab() {
+            const pendingList = worksState.filter(w => w.status === 'pending');
+            const publishedList = worksState.filter(w => w.status === 'published');
+
+            document.getElementById('overview-stat-pending').innerText = pendingList.length;
+            document.getElementById('overview-stat-published').innerText = publishedList.length;
+            document.getElementById('overview-stat-members').innerText = membersState.length;
+            document.getElementById('overview-stat-categories').innerText = categoriesState.filter(c => c.active).length;
+
+            document.getElementById('badge-queue-count').innerText = pendingList.length;
+            document.getElementById('badge-queue-curation').innerText = pendingList.length;
+
+            const listContainer = document.getElementById('overview-quick-queue-list');
+            if (pendingList.length === 0) {
+                listContainer.innerHTML = `<div class="py-4 text-center text-xs text-slate-400">Tidak ada antrean naskah masuk.</div>`;
+                return;
+            }
+
+            listContainer.innerHTML = pendingList.slice(0, 3).map(w => `
+                <div class="py-3 flex items-center justify-between">
+                    <div>
+                        <h4 class="text-xs font-bold text-slate-900">${w.title} ${w.file ? `<span class="ml-1 text-[10px] font-normal text-indigo-600">[${w.file.name}]</span>` : ''}</h4>
+                        <p class="text-[11px] text-slate-500">Oleh ${w.author} • ${w.category} (${w.subcategory})</p>
+                    </div>
+                    <button onclick="switchAdminTab('curation'); openCurateModal('${w.id}')" class="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold rounded-lg hover:bg-amber-100 transition">
+                        Evaluasi
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // TAB 2: RUANG KURASI TABLE
+        function renderCurationTable() {
+            const tbody = document.getElementById('admin-queue-tbody');
+            const pendingWorks = worksState.filter(w => w.status === 'pending');
+
+            if (pendingWorks.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Seluruh naskah telah dikurasi. Antrean kosong.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = pendingWorks.map(work => `
+                <tr class="hover:bg-slate-50/80 transition">
+                    <td class="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">${work.date}</td>
+                    <td class="px-6 py-4 font-semibold text-slate-900 text-xs">${work.author}</td>
+                    <td class="px-6 py-4 font-medium text-slate-800 text-xs">${work.title}</td>
+                    <td class="px-6 py-4 text-xs">
+                        ${work.file ? `
+                            <span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold text-[11px]">
+                                <i class="fa-solid fa-paperclip"></i>
+                                <span class="max-w-[120px] truncate">${work.file.name}</span>
+                            </span>
+                        ` : `<span class="text-slate-400 font-italic text-[11px]">Teks Langsung</span>`}
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold inline-flex items-center space-x-1">
+                            <i class="fa-solid fa-clock text-[10px]"></i><span>Menunggu Kurasi</span>
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="openCurateModal('${work.id}')" class="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition">
+                            <i class="fa-solid fa-eye mr-1"></i> Periksa Naskah
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function filterCurationTable() {
+            const q = document.getElementById('curation-search').value.toLowerCase();
+            document.querySelectorAll('#admin-queue-tbody tr').forEach(row => {
+                row.style.display = row.innerText.toLowerCase().includes(q) ? '' : 'none';
+            });
+        }
+
+        // TAB 3: MANAJEMEN KARYA (CMS) TABLE
+        function renderCmsTable() {
+            const tbody = document.getElementById('cms-tbody');
+            const statusFilter = document.getElementById('cms-filter-status').value;
+            const categoryFilter = document.getElementById('cms-filter-category').value;
+            const query = document.getElementById('cms-search').value.toLowerCase();
+
+            let filtered = worksState.filter(w => {
+                const matchStatus = statusFilter === 'all' || w.status === statusFilter;
+                const matchCategory = categoryFilter === 'all' || w.category === categoryFilter;
+                const matchQuery = w.title.toLowerCase().includes(query) || w.author.toLowerCase().includes(query);
+                return matchStatus && matchCategory && matchQuery;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400 text-xs">Tidak ada data naskah sesuai filter.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(w => {
+                let statusBadge = '';
+                if (w.status === 'published') statusBadge = `<span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">Diterbitkan</span>`;
+                else if (w.status === 'pending') statusBadge = `<span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">Menunggu</span>`;
+                else if (w.status === 'revision') statusBadge = `<span class="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold">Revisi</span>`;
+                else statusBadge = `<span class="px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 text-xs font-semibold">Ditolak</span>`;
+
+                return `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-6 py-4">
+                            <div class="font-bold text-slate-900 text-xs">${w.title}</div>
+                            <div class="text-[11px] text-slate-500">Penulis: ${w.author} (${w.email})</div>
+                        </td>
+                        <td class="px-6 py-4 text-xs font-semibold text-indigo-600">${w.category} - ${w.subcategory}</td>
+                        <td class="px-6 py-4 text-xs">
+                            ${w.file ? `<span class="text-indigo-600 font-semibold"><i class="fa-solid fa-file-pdf mr-1"></i>${w.file.name}</span>` : '<span class="text-slate-400">-</span>'}
+                        </td>
+                        <td class="px-6 py-4 text-xs">${w.date}</td>
+                        <td class="px-6 py-4">${statusBadge}</td>
+                        <td class="px-6 py-4 text-center">
+                            <button onclick="toggleFeatured('${w.id}')" class="text-base ${w.featured ? 'text-amber-400' : 'text-slate-300 hover:text-amber-400'}">
+                                <i class="fa-solid fa-star"></i>
+                            </button>
+                        </td>
+                        <td class="px-6 py-4 text-right space-x-1">
+                            <button onclick="openEditWorkModal('${w.id}')" class="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition" title="Edit Naskah">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <button onclick="deleteWork('${w.id}')" class="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition" title="Hapus Karya">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function toggleFeatured(id) {
+            const w = worksState.find(x => x.id === id);
+            if (w) {
+                w.featured = !w.featured;
+                showToast("Status Unggulan Diperbarui", `Karya "${w.title}" ${w.featured ? 'dijadikan' : 'dihapus dari'} Karya Pilihan.`);
+                renderAdminView();
+                renderPublicView();
+            }
+        }
+
+        function deleteWork(id) {
+            const w = worksState.find(x => x.id === id);
+            if (w && confirm(`Apakah Anda yakin ingin menghapus karya "${w.title}"?`)) {
+                worksState = worksState.filter(x => x.id !== id);
+                showToast("Naskah Dihapus", "Karya berhasil dihapus dari sistem.");
+                renderAdminView();
+                renderPublicView();
+            }
+        }
+
+        // EDIT WORK MODAL (CMS)
+        function openEditWorkModal(id) {
+            const w = worksState.find(x => x.id === id);
+            if (!w) return;
+
+            document.getElementById('edit-work-id').value = w.id;
+            document.getElementById('edit-work-title').value = w.title;
+            document.getElementById('edit-work-status').value = w.status;
+            document.getElementById('edit-work-summary').value = w.summary;
+            document.getElementById('edit-work-content').value = w.content;
+
+            document.getElementById('modal-edit-work').classList.remove('hidden');
+        }
+
+        function closeEditWorkModal() {
+            document.getElementById('modal-edit-work').classList.add('hidden');
+        }
+
+        function handleSaveEditWork(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-work-id').value;
+            const w = worksState.find(x => x.id === id);
+
+            if (w) {
+                w.title = document.getElementById('edit-work-title').value;
+                w.status = document.getElementById('edit-work-status').value;
+                w.summary = document.getElementById('edit-work-summary').value;
+                w.content = document.getElementById('edit-work-content').value;
+
+                showToast("Perubahan Disimpan", `Data naskah "${w.title}" telah diperbarui.`);
+                closeEditWorkModal();
+                renderAdminView();
+                renderPublicView();
+            }
+        }
+
+        // TAB 4: MANAJEMEN ANGGOTA TABLE
+        function renderMembersTable() {
+            const tbody = document.getElementById('members-tbody');
+            document.getElementById('members-count-badge').innerText = `${membersState.length} Anggota`;
+
+            tbody.innerHTML = membersState.map(m => {
+                const count = worksState.filter(w => w.author === m.name).length;
+                const isSuspended = m.status === 'Ditangguhkan';
+
+                return `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 rounded-full ${m.avatarColor} text-white flex items-center justify-center font-bold text-xs">
+                                    ${m.name.charAt(0)}
+                                </div>
+                                <div class="font-bold text-slate-900 text-xs">${m.name}</div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-xs text-slate-500">${m.email}</td>
+                        <td class="px-6 py-4 text-xs font-semibold text-indigo-600">${m.badge}</td>
+                        <td class="px-6 py-4 text-xs text-center font-bold text-slate-800">${count}</td>
+                        <td class="px-6 py-4">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${isSuspended ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">
+                                ${m.status}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <button onclick="toggleMemberStatus('${m.id}')" class="px-3 py-1.5 rounded-lg border text-xs font-semibold transition ${isSuspended ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'}">
+                                ${isSuspended ? 'Aktifkan' : 'Tangguhkan'}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function toggleMemberStatus(id) {
+            const m = membersState.find(x => x.id === id);
+            if (m) {
+                m.status = m.status === 'Aktif' ? 'Ditangguhkan' : 'Aktif';
+                showToast("Status Anggota Diubah", `Akun ${m.name} kini berstatus ${m.status}.`);
+                saveDiksiMembers();
+                renderMembersTable();
+            }
+        }
+
+        function openRegisterMemberModal() {
+            document.getElementById('form-register-member').reset();
+            document.getElementById('modal-register-member').classList.remove('hidden');
+        }
+
+        function closeRegisterMemberModal() {
+            document.getElementById('modal-register-member').classList.add('hidden');
+        }
+
+        async function handlePublicMemberRegistration(e) {
+            e.preventDefault();
+            const name = document.getElementById('register-member-name').value.trim();
+            const username = document.getElementById('register-member-username').value.trim().toLowerCase();
+            const email = document.getElementById('register-member-email').value.trim().toLowerCase();
+            const role = document.getElementById('register-member-role').value;
+            if (!name || !username || !email) return;
+            const ok = await diksiSave('registerMember', {name, username, email, role});
+            if (!ok) return;
+            closeRegisterMemberModal();
+            document.getElementById('form-register-member').reset();
+            showToast('Pendaftaran Berhasil', 'Data anggota tersimpan di database DIKSI.');
+        }
+
+        function openAddMemberModal() {
+            document.getElementById('modal-add-member').classList.remove('hidden');
+        }
+
+        function closeAddMemberModal() {
+            document.getElementById('modal-add-member').classList.add('hidden');
+        }
+
+        function handleAddMemberSubmit(e) {
+            e.preventDefault();
+            const name = document.getElementById('add-member-name').value;
+            const email = document.getElementById('add-member-email').value;
+            const badge = document.getElementById('add-member-badge').value;
+
+            membersState.push({
+                id: 'm' + (membersState.length + 1),
+                name: name,
+                email: email,
+                badge: badge,
+                avatarColor: 'bg-indigo-600',
+                status: 'Aktif'
+            });
+
+            saveDiksiMembers();
+            showToast("Anggota Baru Ditambahkan", `${name} berhasil terdaftar.`);
+            closeAddMemberModal();
+            renderMembersTable();
+            renderPublicView();
+        }
+
+        // TAB 5: PENGATURAN KATEGORI & PANDUAN
+        function renderSettingsTab() {
+            const container = document.getElementById('categories-list-container');
+            container.innerHTML = categoriesState.map(c => `
+                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <div>
+                        <span class="font-bold text-slate-800">${c.main}:</span>
+                        <span class="text-slate-600 ml-1">${c.sub}</span>
+                    </div>
+                    <button onclick="toggleCategoryActive('${c.id}')" class="px-2.5 py-1 rounded-lg font-semibold text-[11px] ${c.active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">
+                        ${c.active ? 'Aktif' : 'Nonaktif'}
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function handleAddNewCategory(e) {
+            e.preventDefault();
+            const main = document.getElementById('new-cat-main').value;
+            const sub = document.getElementById('new-cat-sub').value;
+
+            categoriesState.push({
+                id: 'c' + (categoriesState.length + 1),
+                main: main,
+                sub: sub,
+                active: true
+            });
+
+            document.getElementById('new-cat-sub').value = '';
+            populateCategoryDropdown();
+            renderSettingsTab();
+            renderAdminView();
+            renderCategoryNavigation();
+            renderCategoryGrid(activePublicCategory);
+            showToast("Kategori Ditambahkan", `Kategori "${main}: ${sub}" berhasil ditambahkan.`);
+        }
+
+        function toggleCategoryActive(id) {
+            const c = categoriesState.find(x => x.id === id);
+            if (c) {
+                c.active = !c.active;
+                populateCategoryDropdown();
+                renderSettingsTab();
+                renderAdminView();
+                renderCategoryNavigation();
+                renderCategoryGrid(activePublicCategory);
+                showToast("Status Kategori Diperbarui", `Kategori "${c.sub}" ${c.active ? 'diaktifkan' : 'dinonaktifkan'}.`);
+            }
+        }
+
+        function handleSaveGuidelines(e) {
+            e.preventDefault();
+            const gText = document.getElementById('setting-guidelines-text').value;
+            const s3Text = document.getElementById('setting-step3-text').value;
+
+            document.getElementById('public-guideline-text').innerText = `"${gText}"`;
+            document.getElementById('guide-step-3-text').innerText = s3Text;
+
+            showToast("Panduan Diterbitkan", "Teks panduan kurasi di halaman publik berhasil diperbarui.");
+        }
+
+        // SUBMIT NEW WORK FORM HANDLER
+        async function handleWorkSubmission(e) {
+            e.preventDefault();
+            const author = document.getElementById('input-author').value.trim();
+            const email = document.getElementById('input-email').value.trim();
+            const title = document.getElementById('input-title').value.trim();
+            const catVal = document.getElementById('input-category').value.split(' - ');
+            const summary = document.getElementById('input-summary').value.trim();
+            let content = document.getElementById('input-content').value;
+            if (!content && currentUploadedFile) content = `[Naskah terlampir: ${currentUploadedFile.name}]\\n\\nRingkasan: ${summary}`;
+            const work = {
+                id:'work_' + Date.now(), author, email, title,
+                category:catVal[0] || '', subcategory:catVal[1] || '',
+                summary, content,
+                file: currentUploadedFile ? {name:currentUploadedFile.name, size:currentUploadedFile.size} : null
+            };
+            const ok = await diksiSave('submitWork', {work});
+            if (!ok) return;
+            closeSubmitModal();
+            document.getElementById('form-submit-work').reset();
+            removeSelectedFile(new Event('click'));
+            showToast('Naskah Berhasil Dikirim!', 'Naskah tersimpan di Google Sheets dan menunggu kurasi admin.');
+        }
+
+        // CURATION MODAL LOGIC & ACTIONS
+        function openCurateModal(id) {
+            activeCuratingWorkId = id;
+            const work = worksState.find(w => w.id === id);
+
+            if (!work) return;
+
+            document.getElementById('curate-modal-category').innerText = `${work.category} - ${work.subcategory}`;
+            document.getElementById('curate-modal-date').innerText = work.date;
+            document.getElementById('curate-modal-title').innerText = work.title;
+            document.getElementById('curate-modal-author').innerText = work.author;
+            document.getElementById('curate-modal-body').innerText = work.content;
+            document.getElementById('curate-feedback-notes').value = work.curatorNote || '';
+
+            // Handle Berkas Lampiran tampilan
+            const fileBox = document.getElementById('curate-file-box');
+            if (work.file) {
+                fileBox.classList.remove('hidden');
+                document.getElementById('curate-file-name').innerText = work.file.name;
+                document.getElementById('curate-file-size').innerText = `${work.file.size || 'Dokumen Terlampir'}`;
+            } else {
+                fileBox.classList.add('hidden');
+            }
+
+            document.getElementById('modal-curate').classList.remove('hidden');
+        }
+
+        function downloadAttachment() {
+            if (!activeCuratingWorkId) return;
+            const work = worksState.find(w => w.id === activeCuratingWorkId);
+            if (work && work.file) {
+                if (work.file.dataUrl) {
+                    const a = document.createElement('a');
+                    a.href = work.file.dataUrl;
+                    a.download = work.file.name;
+                    a.click();
+                } else {
+                    alert(`Mengunduh berkas simulasi: ${work.file.name}`);
+                }
+            }
+        }
+
+        function closeCurateModal() {
+            document.getElementById('modal-curate').classList.add('hidden');
+            activeCuratingWorkId = null;
+        }
+
+        async function processCuration(actionStatus) {
+            if (!activeCuratingWorkId) return;
+            const notes = document.getElementById('curate-feedback-notes').value;
+            const work = worksState.find(w => w.id === activeCuratingWorkId);
+            const ok = await diksiSave('curateWork', {id:activeCuratingWorkId, status:actionStatus, note:notes, pin:window.diksiAdminPin || ''});
+            if (!ok) return;
+            if (work) showToast('Status Kurasi Diperbarui', `Status karya "${work.title}" telah disimpan.`);
+            closeCurateModal();
+        }
+
+        // MODAL TOGGLES
+        function openSubmitModal() {
+            document.getElementById('modal-submit').classList.remove('hidden');
+        }
+
+        function closeSubmitModal() {
+            document.getElementById('modal-submit').classList.add('hidden');
+            removeSelectedFile(new Event('click'));
+        }
+
+        // TOAST NOTIFICATION UTILITY
+        function showToast(title, message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-title').innerText = title;
+            document.getElementById('toast-message').innerText = message;
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+    </script>
+</body>
+</html>
