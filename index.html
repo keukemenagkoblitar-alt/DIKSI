@@ -40,6 +40,48 @@
                 .then(() => new Promise(resolve => setTimeout(resolve, 900)));
         }
         async function diksiRefreshFromSheets(showMessage=false) {
+    try {
+        const result = await diksiJsonp({
+            action: 'state',
+            pin: isAdminLoggedIn ? (window.diksiAdminPin || '') : ''
+        });
+
+        if (!result || !result.ok) {
+            throw new Error(result?.message || 'Respons database tidak valid');
+        }
+
+        membersState = result.members || [];
+        worksState = result.works || [];
+        diksiLikesState = result.likes || {};
+        diksiCommentsState = result.comments || {};
+
+        diksiCloudReady = true;
+
+        renderPublicView();
+        renderAdminView();
+
+        if (showMessage) {
+            showToast(
+                'Database Diperbarui',
+                'Data DIKSI berhasil dimuat dari Google Sheets.'
+            );
+        }
+
+        return true;
+
+    } catch (err) {
+        console.error(err);
+
+        if (showMessage) {
+            showToast(
+                'Koneksi Database Gagal',
+                err.message + '. Periksa URL Web App dan deployment.'
+            );
+        }
+
+        return false;
+    }
+}
             try {
                 const result = await diksiJsonp({action:'state'});
                 if (!result || !result.ok) throw new Error(result?.message || 'Respons database tidak valid');
@@ -1954,6 +1996,18 @@
                         <span>${work.date}</span>
                     </div>
                     ${renderWorkFeedback(work)}
+                    ${work.file && work.file.previewUrl ? `
+    <div class="mt-3">
+        <a href="${work.file.previewUrl}" target="_blank"
+           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
+           <i class="fa-solid fa-book-open"></i> Baca Naskah
+        </a>
+        <a href="${work.file.downloadUrl}" target="_blank"
+           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold ml-2">
+           <i class="fa-solid fa-download"></i> Unduh
+        </a>
+    </div>
+` : ''}
                 </div>
             `).join('');
         }
@@ -2330,7 +2384,12 @@
                 id:'work_' + Date.now(), author, email, title,
                 category:catVal[0] || '', subcategory:catVal[1] || '',
                 summary, content,
-                file: currentUploadedFile ? {name:currentUploadedFile.name, size:currentUploadedFile.size} : null
+                file: currentUploadedFile ? {
+    name: currentUploadedFile.name,
+    size: currentUploadedFile.size,
+    mimeType: currentUploadedFile.mimeType,
+    dataUrl: currentUploadedFile.dataUrl
+} : null
             };
             const ok = await diksiSave('submitWork', {work});
             if (!ok) return;
@@ -2367,20 +2426,36 @@
             document.getElementById('modal-curate').classList.remove('hidden');
         }
 
-        function downloadAttachment() {
-            if (!activeCuratingWorkId) return;
-            const work = worksState.find(w => w.id === activeCuratingWorkId);
-            if (work && work.file) {
-                if (work.file.dataUrl) {
-                    const a = document.createElement('a');
-                    a.href = work.file.dataUrl;
-                    a.download = work.file.name;
-                    a.click();
-                } else {
-                    alert(`Mengunduh berkas simulasi: ${work.file.name}`);
-                }
-            }
-        }
+        
+function downloadAttachment() {
+    if (!activeCuratingWorkId) return;
+
+    const work = worksState.find(
+        w => w.id === activeCuratingWorkId
+    );
+
+    if (!work || !work.file) {
+        alert('Berkas lampiran tidak ditemukan.');
+        return;
+    }
+
+    if (work.file.downloadUrl) {
+        window.open(work.file.downloadUrl, '_blank');
+        return;
+    }
+
+    if (work.file.dataUrl) {
+        const a = document.createElement('a');
+        a.href = work.file.dataUrl;
+        a.download = work.file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return;
+    }
+
+    alert('Tautan berkas belum tersedia. Silakan periksa kembali data Google Drive.');
+}
 
         function closeCurateModal() {
             document.getElementById('modal-curate').classList.add('hidden');
