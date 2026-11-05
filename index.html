@@ -1674,10 +1674,11 @@
 
         async function handleAdminLoginSubmit(e) {
             e.preventDefault();
-            const inputPass = document.getElementById('admin-login-password').value;
+            const inputPass = document.getElementById('admin-login-password').value.trim();
             const errorMsg = document.getElementById('admin-login-error');
             try {
                 const result = await diksiJsonp({action:'adminLogin', pin:inputPass});
+                console.log('HASIL LOGIN DIKSI:', result);
                 if (result && result.ok) {
                     isAdminLoggedIn = true;
                     window.diksiAdminPin = inputPass;
