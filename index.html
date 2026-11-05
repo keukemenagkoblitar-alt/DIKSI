@@ -183,7 +183,7 @@
                     <i class="fa-solid fa-house text-xs"></i><span>Beranda</span>
                 </a>
                 <a href="#kategori" class="hover:text-cyan-400 transition">Baca Karya</a>
-                <a href="#peringkat" class="hover:text-cyan-400 transition">Penulis Terbaik</a>
+                <a href="#peringkat" class="hover:text-cyan-400 transition">3 Karya Unggulan</a>
                 <a href="#alur" class="hover:text-cyan-400 transition">Panduan Kurasi</a>
                 <a href="#ajakan" class="hover:text-cyan-400 transition">Tentang Kami</a>
             </nav>
@@ -210,10 +210,7 @@
                 </button>
 
                 <!-- CTA Kirim Karya (Public) -->
-                <button onclick="openSubmitModal()" class="hidden sm:inline-flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 transition duration-200">
-                    <i class="fa-solid fa-paper-plane text-xs"></i>
-                    <span>Kirim Karya</span>
-                </button>
+                openSubmitModal()
             </div>
         </div>
     </header>
@@ -380,9 +377,9 @@
                 <div class="flex flex-col md:flex-row md:items-end justify-between mb-8">
                     <div>
                         <h2 class="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-1">Kurasi Pilihan Redaksi</h2>
-                        <h3 class="text-2xl font-serif font-bold text-white">Etalase Karya Terbaik</h3>
+                        <h3 class="text-2xl font-serif font-bold text-white">3 Karya Unggulan</h3>
                     </div>
-                    <p class="text-sm text-slate-400 mt-2 md:mt-0">Tulisan pilihan tim kurator dengan standar estetika & edukasi tinggi.</p>
+                    <p class="text-sm text-slate-400 mt-2 md:mt-0">Tiga karya pilihan yang ditetapkan oleh tim kurator DIKSI.</p>
                 </div>
 
                 <div id="featured-works-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1663,7 +1660,9 @@
             renderCommunityStats();
             // 1. Featured Works
             const featuredContainer = document.getElementById('featured-works-grid');
-            const featuredWorks = worksState.filter(w => w.status === 'published' && w.featured);
+            const featuredWorks = worksState
+    .filter(w => w.status === 'published' && w.featured)
+    .slice(0, 3);
             
             featuredContainer.innerHTML = featuredWorks.map(work => `
                 <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition flex flex-col justify-between">
