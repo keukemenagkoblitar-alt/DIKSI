@@ -17,37 +17,85 @@
 
         // ===== DIKSI CLOUD DATABASE (Google Sheets) =====
         const DIKSI_API_URL = "https://script.google.com/macros/s/AKfycbwk_LJOZtzHbAoKCgFHTXs0Ruo3d1EKojWMezwCaZYQNJk6kAFk5NQEZ8xdVPT_9eN39A/exec";
-        let diksiCloudReady = false;
-        let diksiLikesState = {};
-        let diksiCommentsState = {};
 
-        function diksiJsonp(params) {
-            return new Promise((resolve, reject) => {
-                const cb = 'diksi_cb_' + Date.now() + '_' + Math.floor(Math.random()*100000);
-                const script = document.createElement('script');
-                const timer = setTimeout(() => { cleanup(); reject(new Error('Koneksi ke database timeout')); }, 15000);
-                function cleanup(){ clearTimeout(timer); delete window[cb]; script.remove(); }
-                window[cb] = data => { cleanup(); resolve(data); };
-                script.onerror = () => { cleanup(); reject(new Error('Tidak dapat menghubungi Google Sheets')); };
-                script.src = DIKSI_API_URL + '?' + new URLSearchParams({...params, callback:cb}).toString();
-                document.head.appendChild(script);
-            });
+let diksiCloudReady = false;
+let diksiLikesState = {};
+let diksiCommentsState = {};
+
+function diksiJsonp(params) {
+    return new Promise((resolve, reject) => {
+        const callbackName =
+            'diksi_cb_' + Date.now() + '_' +
+            Math.floor(Math.random() * 100000);
+
+        const script = document.createElement('script');
+        const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('Koneksi ke database timeout.'));
+        }, 15000);
+
+        function cleanup() {
+            clearTimeout(timer);
+            delete window[callbackName];
+            script.remove();
         }
-        function diksiPost(payload) {
-            const body = new URLSearchParams();
-            Object.entries(payload).forEach(([k,v]) => body.set(k, typeof v === 'string' ? v : JSON.stringify(v)));
-            return fetch(DIKSI_API_URL, { method:'POST', mode:'no-cors', body })
-                .then(() => new Promise(resolve => setTimeout(resolve, 900)));
-        }
-        async function diksiRefreshFromSheets(showMessage=false) {
+
+        window[callbackName] = data => {
+            cleanup();
+            resolve(data);
+        };
+
+        script.onerror = () => {
+            cleanup();
+            reject(new Error('Tidak dapat menghubungi Google Sheets.'));
+        };
+
+        const query = new URLSearchParams({
+            ...params,
+            callback: callbackName
+        });
+
+        script.src = DIKSI_API_URL + '?' + query.toString();
+        document.head.appendChild(script);
+    });
+}
+
+function diksiPost(payload) {
+    const body = new URLSearchParams();
+
+    Object.entries(payload).forEach(([key, value]) => {
+        body.set(
+            key,
+            typeof value === 'string' ? value : JSON.stringify(value)
+        );
+    });
+
+    return fetch(DIKSI_API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body
+    });
+}
+
+function diksiWait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function diksiRefreshFromSheets(showMessage = false) {
     try {
         const result = await diksiJsonp({
             action: 'state',
-            pin: isAdminLoggedIn ? (window.diksiAdminPin || '') : ''
+            pin: isAdminLoggedIn
+                ? (window.diksiAdminPin || '')
+                : ''
         });
 
         if (!result || !result.ok) {
-            throw new Error(result?.message || 'Respons database tidak valid');
+            throw new Error(
+                result && result.message
+                    ? result.message
+                    : 'Data DIKSI tidak berhasil dimuat.'
+            );
         }
 
         membersState = result.members || [];
@@ -58,60 +106,77 @@
         diksiCloudReady = true;
 
         renderPublicView();
-        renderAdminView();
 
-        if (showMessage) {
-            showToast(
-                'Database Diperbarui',
-                'Data DIKSI berhasil dimuat dari Google Sheets.'
-            );
+        if (isAdminLoggedIn) {
+            renderAdminView();
         }
 
         return true;
 
-    } catch (err) {
-        console.error(err);
+    } catch (error) {
+        diksiCloudReady = false;
 
         if (showMessage) {
-            showToast(
-                'Koneksi Database Gagal',
-                err.message + '. Periksa URL Web App dan deployment.'
-            );
+            alert('Gagal memuat database DIKSI: ' + error.message);
         }
 
+        console.error('DIKSI refresh error:', error);
         return false;
     }
 }
-            try {
-                const result = await diksiJsonp({action:'state'});
-                if (!result || !result.ok) throw new Error(result?.message || 'Respons database tidak valid');
-                membersState = result.members || [];
-                worksState = result.works || [];
-                diksiLikesState = result.likes || {};
-                diksiCommentsState = result.comments || {};
-                diksiCloudReady = true;
-                renderPublicView();
-                renderAdminView();
-                if (showMessage) showToast('Database Diperbarui', 'Data DIKSI berhasil dimuat dari Google Sheets.');
-                return true;
-            } catch (err) {
-                console.error(err);
-                if (showMessage) showToast('Koneksi Database Gagal', err.message + '. Periksa URL Web App dan deployment.');
-                return false;
-            }
+
+async function diksiSave(action, data = {}) {
+    try {
+        await diksiPost({
+            action,
+            ...data
+        });
+
+        // Beri waktu Apps Script menyelesaikan penyimpanan.
+        await diksiWait(1800);
+
+        const refreshed = await diksiRefreshFromSheets(false);
+
+        if (!refreshed) {
+            throw new Error(
+                'Data dikirim, tetapi database belum berhasil dimuat ulang.'
+            );
         }
-        async function diksiSave(action, data={}) {
-            try {
-                await diksiPost({action, ...data});
-                await diksiRefreshFromSheets(false);
-                return true;
-            } catch(err) {
-                console.error(err);
-                showToast('Gagal Mengirim Data', 'Periksa koneksi internet lalu coba kembali.');
-                return false;
+
+        // Pastikan pengiriman karya benar-benar muncul di database.
+        if (action === 'submitWork' && data.work) {
+            const saved = worksState.some(
+                work => work.id === data.work.id
+            );
+
+            if (!saved) {
+                throw new Error(
+                    'Karya belum ditemukan di database. Silakan periksa kembali.'
+                );
             }
         }
 
+        // Pastikan perubahan kurasi sudah tersimpan.
+        if (action === 'curateWork') {
+            const updated = worksState.find(
+                work => work.id === data.id
+            );
+
+            if (!updated || updated.status !== data.status) {
+                throw new Error(
+                    'Status kurasi belum terkonfirmasi di database.'
+                );
+            }
+        }
+
+        return true;
+
+    } catch (error) {
+        alert('Penyimpanan DIKSI gagal: ' + error.message);
+        console.error('DIKSI save error:', error);
+        return false;
+    }
+}
         tailwind.config = {
     theme: {
         extend: {
