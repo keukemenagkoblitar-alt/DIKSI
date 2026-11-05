@@ -1527,7 +1527,7 @@
                 return;
             }
 
-            if (file.size > 10 * 1024 * 1024) { // Maks 10MB
+            if (file.size > 4 * 1024 * 1024) { // Maks 10MB
                 alert("Ukuran berkas melebihi batas 10MB.");
                 return;
             }
@@ -1536,11 +1536,12 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 currentUploadedFile = {
-                    name: file.name,
-                    size: formatBytes(file.size),
-                    ext: fileExt,
-                    dataUrl: e.target.result
-                };
+    name: file.name,
+    size: formatBytes(file.size),
+    ext: fileExt,
+    mimeType: file.type || 'application/octet-stream',
+    dataUrl: e.target.result
+};
                 displayFilePreview(currentUploadedFile);
             };
             reader.readAsDataURL(file);
