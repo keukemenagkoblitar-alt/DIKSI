@@ -1574,21 +1574,52 @@
             switchView('public');
         }
 
-        function handleChangePassword(e) {
-            e.preventDefault();
-            const newPass = document.getElementById('setting-new-password').value;
-            const confirmPass = document.getElementById('setting-confirm-password').value;
+        async function handleChangePassword(e) {
+    e.preventDefault();
 
-            if (newPass !== confirmPass) {
-                alert("Konfirmasi kata sandi baru tidak cocok!");
-                return;
-            }
+    const newPass = document.getElementById('setting-new-password').value;
+    const confirmPass = document.getElementById('setting-confirm-password').value;
 
+    if (newPass.length < 6) {
+        alert('Kata sandi baru minimal 6 karakter!');
+        return;
+    }
+
+    if (newPass !== confirmPass) {
+        alert('Konfirmasi kata sandi baru tidak cocok!');
+        return;
+    }
+
+    const currentPin = window.diksiAdminPin || '';
+
+    if (!currentPin) {
+        alert('Sesi admin tidak ditemukan. Silakan login ulang.');
+        return;
+    }
+
+    try {
+        const result = await diksiJsonp({
+            action: 'changeAdminPin',
+            currentPin: currentPin,
+            newPin: newPass
+        });
+
+        if (result && result.ok) {
+            window.diksiAdminPin = newPass;
             adminPasswordCurrent = newPass;
+
             document.getElementById('setting-new-password').value = '';
             document.getElementById('setting-confirm-password').value = '';
-            showToast("Sandi Diperbarui", "Kata sandi akses admin berhasil diganti.");
+
+            showToast('Sandi Diperbarui', 'Kata sandi admin berhasil disimpan.');
+        } else {
+            alert(result.message || 'Gagal memperbarui kata sandi.');
         }
+
+    } catch (err) {
+        alert('Gagal menghubungi server: ' + err.message);
+    }
+}
 
         // VIEW SWITCHING SYSTEM (PUBLIC vs ADMIN)
         function switchView(view) {
