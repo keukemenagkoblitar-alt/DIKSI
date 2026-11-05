@@ -157,9 +157,87 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+
+/* =========================================
+   ANIMASI TAMBAHAN WEBSITE DIKSI
+   ========================================= */
+
+/* Lapisan partikel latar belakang */
+#diksi-particles {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.42;
+}
+
+/* Judul utama DIKSI */
+.diksi-title-animate {
+    animation: diksiTitleIn 1.2s ease both;
+}
+
+.diksi-title-animate span {
+    background-size: 200% 200%;
+    animation: diksiTextShine 5s ease-in-out infinite;
+}
+
+@keyframes diksiTitleIn {
+    from {
+        opacity: 0;
+        transform: translateY(25px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes diksiTextShine {
+    0%, 100% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+/* Efek muncul ketika halaman digulir */
+.diksi-reveal {
+    opacity: 0;
+    transform: translateY(22px);
+    transition:
+        opacity 0.75s ease,
+        transform 0.75s ease;
+}
+
+.diksi-reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Pengaturan untuk pengguna yang mengurangi animasi */
+@media (prefers-reduced-motion: reduce) {
+    .diksi-title-animate,
+    .diksi-title-animate span {
+        animation: none !important;
+    }
+
+    .diksi-reveal {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+
+    #diksi-particles {
+        display: none;
+    }
+}
     </style>
 </head>
 <body class="h-full font-sans text-slate-800 flex flex-col antialiased bg-slate-900">
+<canvas id="diksi-particles" aria-hidden="true"></canvas>
 
    
    <!-- TOP NAVIGATION BAR -->
@@ -2342,6 +2420,206 @@
                 toast.classList.add('translate-y-20', 'opacity-0');
             }, 3500);
         }
+
+/* =========================================
+   ANIMASI DIKSI: PARTIKEL + SCROLL REVEAL
+   ========================================= */
+
+(function () {
+    const reduceMotion = window.matchMedia(
+        '(prefers-reduced-motion: reduce)'
+    ).matches;
+
+    /* -------------------------------------
+       1. ANIMASI JUDUL UTAMA
+    ------------------------------------- */
+    const heroTitle = document.querySelector('#hero h1');
+
+    if (heroTitle) {
+        heroTitle.classList.add('diksi-title-animate');
+    }
+
+    /* -------------------------------------
+       2. ANIMASI PARTIKEL LATAR BELAKANG
+    ------------------------------------- */
+    const canvas = document.getElementById('diksi-particles');
+
+    if (canvas && !reduceMotion) {
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let animationFrame = null;
+
+        function resizeCanvas() {
+            const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+
+            canvas.width = Math.floor(window.innerWidth * ratio);
+            canvas.height = Math.floor(window.innerHeight * ratio);
+
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+
+            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+            const total = window.innerWidth < 600 ? 18 : 34;
+
+            particles = Array.from({ length: total }, () => ({
+                x: Math.random() * window.innerWidth,
+                y: Math.random() * window.innerHeight,
+                size: Math.random() * 2 + 0.7,
+                speedX: (Math.random() - 0.5) * 0.35,
+                speedY: (Math.random() - 0.5) * 0.35,
+                opacity: Math.random() * 0.35 + 0.15
+            }));
+        }
+
+        function drawParticles() {
+            ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+            particles.forEach(p => {
+                p.x += p.speedX;
+                p.y += p.speedY;
+
+                if (p.x < 0) p.x = window.innerWidth;
+                if (p.x > window.innerWidth) p.x = 0;
+                if (p.y < 0) p.y = window.innerHeight;
+                if (p.y > window.innerHeight) p.y = 0;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(125, 211, 252, ${p.opacity})`;
+                ctx.fill();
+            });
+
+            animationFrame = requestAnimationFrame(drawParticles);
+        }
+
+        function startParticles() {
+            if (!animationFrame && !document.hidden) {
+                animationFrame = requestAnimationFrame(drawParticles);
+            }
+        }
+
+        function stopParticles() {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+                animationFrame = null;
+            }
+        }
+
+        resizeCanvas();
+        startParticles();
+
+        window.addEventListener('resize', resizeCanvas);
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopParticles();
+            } else {
+                startParticles();
+            }
+        });
+    }
+
+    /* -------------------------------------
+       3. SCROLL REVEAL SELURUH HALAMAN
+    ------------------------------------- */
+
+    const revealSelector = [
+        '#view-public section',
+        '#view-public .grid > *',
+        '#view-admin section',
+        '#view-admin .grid > *'
+    ].join(',');
+
+    let revealObserver = null;
+
+    if ('IntersectionObserver' in window && !reduceMotion) {
+        revealObserver = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, {
+            threshold: 0.10,
+            rootMargin: '0px 0px -35px 0px'
+        });
+    }
+
+    function registerReveal(element) {
+        if (
+            !element ||
+            element.nodeType !== 1 ||
+            element.dataset.diksiReveal === '1' ||
+            element.closest('.hidden')
+        ) {
+            return;
+        }
+
+        element.dataset.diksiReveal = '1';
+        element.classList.add('diksi-reveal');
+
+        if (reduceMotion || !revealObserver) {
+            element.classList.add('is-visible');
+        } else {
+            revealObserver.observe(element);
+        }
+    }
+
+    function scanReveal(root) {
+        if (!root) return;
+
+        if (
+            root.nodeType === 1 &&
+            root.matches(revealSelector)
+        ) {
+            registerReveal(root);
+        }
+
+        if (root.querySelectorAll) {
+            root.querySelectorAll(revealSelector).forEach(
+                registerReveal
+            );
+        }
+    }
+
+    // Jalankan pada halaman yang sudah tersedia
+    scanReveal(document);
+
+    // Pantau elemen baru yang dibuat oleh sistem DIKSI
+    const publicView = document.getElementById('view-public');
+    const adminView = document.getElementById('view-admin');
+
+    if ('MutationObserver' in window) {
+        const revealMutationObserver = new MutationObserver(
+            mutations => {
+                mutations.forEach(mutation => {
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach(node => {
+                            scanReveal(node);
+                        });
+                    } else if (mutation.type === 'attributes') {
+                        scanReveal(mutation.target);
+                    }
+                });
+            }
+        );
+
+        [publicView, adminView].forEach(view => {
+            if (view) {
+                revealMutationObserver.observe(view, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['class']
+                });
+            }
+        });
+    }
+
+    console.log('Animasi DIKSI berhasil diinisialisasi.');
+})();
     </script>
 </body>
 </html>
