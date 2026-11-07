@@ -127,41 +127,51 @@ async function diksiRefreshFromSheets(showMessage = false) {
 
 async function diksiSave(action, data = {}) {
     try {
-        await diksiPost({
-            action,
-            ...data
-        });
+        // Kirim data ke Apps Script. Mode no-cors dipakai agar tidak terhalang
+        // CORS, sehingga hasil simpan diverifikasi melalui endpoint JSONP.
+        await diksiPost({ action, ...data });
 
-        // Beri waktu Apps Script menyelesaikan penyimpanan.
-        await diksiWait(1800);
+        if (action === 'submitWork') {
+            const workId = String(data.work && data.work.id || '').trim();
+            if (!workId) throw new Error('ID karya tidak terbentuk. Muat ulang halaman lalu coba lagi.');
+
+            let verified = false;
+            let lastError = null;
+            // Tunggu proses simpan Sheets/Drive, lalu cek sampai 25 detik.
+            for (let attempt = 0; attempt < 10; attempt++) {
+                await diksiWait(2500);
+                try {
+                    const check = await diksiJsonp({ action: 'verifySubmission', id: workId });
+                    if (check && check.ok && check.found) {
+                        verified = true;
+                        break;
+                    }
+                    if (check && check.ok === false) lastError = check.message || '';
+                } catch (err) {
+                    lastError = err.message;
+                }
+            }
+            if (!verified) {
+                throw new Error('Karya belum tercatat di Google Sheets. Periksa koneksi, izin Apps Script, dan ukuran lampiran (maksimal 4 MB). ' + (lastError || ''));
+            }
+        } else {
+            await diksiWait(1800);
+        }
 
         const refreshed = await diksiRefreshFromSheets(false);
-
         if (!refreshed) {
-            throw new Error(
-                'Data dikirim, tetapi database belum berhasil dimuat ulang.'
-            );
+            throw new Error('Data tersimpan/dikirim, tetapi database belum berhasil dimuat ulang.');
         }
 
-        // Karya baru berstatus pending memang tidak dikirim ke state publik.
-        // Karena itu jangan memeriksa keberadaannya melalui worksState pengunjung.
-        // Refresh tetap dilakukan agar like/komentar dan karya published tersinkron.
-
-        // Pastikan perubahan kurasi sudah tersimpan.
+        // Karya pending memang tidak tampil pada daftar publik. Verifikasi
+        // pengiriman sudah dilakukan khusus melalui verifySubmission di atas.
         if (action === 'curateWork') {
-            const updated = worksState.find(
-                work => work.id === data.id
-            );
-
+            const updated = worksState.find(work => work.id === data.id);
             if (!updated || updated.status !== data.status) {
-                throw new Error(
-                    'Status kurasi belum terkonfirmasi di database.'
-                );
+                throw new Error('Status kurasi belum terkonfirmasi di database.');
             }
         }
-
         return true;
-
     } catch (error) {
         alert('Penyimpanan DIKSI gagal: ' + error.message);
         console.error('DIKSI save error:', error);
