@@ -127,44 +127,44 @@ async function diksiRefreshFromSheets(showMessage = false) {
 
 async function diksiSave(action, data = {}) {
     try {
-        // Kirim data ke Apps Script. Mode no-cors dipakai agar tidak terhalang
-        // CORS, sehingga hasil simpan diverifikasi melalui endpoint JSONP.
         await diksiPost({ action, ...data });
 
+        // POST no-cors tidak dapat membaca balasan Apps Script.
+        // Untuk kiriman baru, verifikasi langsung berdasarkan ID pada sheet Works.
         if (action === 'submitWork') {
-            const workId = String(data.work && data.work.id || '').trim();
-            if (!workId) throw new Error('ID karya tidak terbentuk. Muat ulang halaman lalu coba lagi.');
+            const workId = data && data.work && data.work.id;
+            if (!workId) throw new Error('ID karya tidak tersedia untuk diverifikasi.');
 
-            let verified = false;
+            let verified = null;
             let lastError = null;
-            // Tunggu proses simpan Sheets/Drive, lalu cek sampai 25 detik.
             for (let attempt = 0; attempt < 10; attempt++) {
-                await diksiWait(2500);
+                if (attempt > 0) await diksiWait(1500);
                 try {
-                    const check = await diksiJsonp({ action: 'verifySubmission', id: workId });
-                    if (check && check.ok && check.found) {
-                        verified = true;
-                        break;
-                    }
-                    if (check && check.ok === false) lastError = check.message || '';
+                    verified = await diksiJsonp({
+                        action: 'verifySubmission',
+                        id: workId
+                    });
+                    if (verified && verified.ok && verified.found) break;
                 } catch (err) {
-                    lastError = err.message;
+                    lastError = err;
                 }
             }
-            if (!verified) {
-                throw new Error('Karya belum tercatat di Google Sheets. Periksa koneksi, izin Apps Script, dan ukuran lampiran (maksimal 4 MB). ' + (lastError || ''));
+
+            if (!verified || !verified.ok || !verified.found) {
+                const detail = verified && verified.message
+                    ? verified.message
+                    : (lastError ? lastError.message : 'ID karya belum ditemukan pada sheet Works.');
+                throw new Error('Karya belum terkonfirmasi tersimpan. ' + detail + ' Pastikan Code.gs versi terbaru sudah di-deploy dan izin akses spreadsheet aktif.');
             }
-        } else {
-            await diksiWait(1800);
         }
 
         const refreshed = await diksiRefreshFromSheets(false);
         if (!refreshed) {
-            throw new Error('Data tersimpan/dikirim, tetapi database belum berhasil dimuat ulang.');
+            // Kiriman sudah terbukti tersimpan; jangan salah menyebutnya gagal.
+            if (action === 'submitWork') return true;
+            throw new Error('Data tersimpan, tetapi daftar DIKSI belum berhasil dimuat ulang.');
         }
 
-        // Karya pending memang tidak tampil pada daftar publik. Verifikasi
-        // pengiriman sudah dilakukan khusus melalui verifySubmission di atas.
         if (action === 'curateWork') {
             const updated = worksState.find(work => work.id === data.id);
             if (!updated || updated.status !== data.status) {
@@ -172,6 +172,7 @@ async function diksiSave(action, data = {}) {
             }
         }
         return true;
+
     } catch (error) {
         alert('Penyimpanan DIKSI gagal: ' + error.message);
         console.error('DIKSI save error:', error);
