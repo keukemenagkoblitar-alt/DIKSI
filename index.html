@@ -143,18 +143,9 @@ async function diksiSave(action, data = {}) {
             );
         }
 
-        // Pastikan pengiriman karya benar-benar muncul di database.
-        if (action === 'submitWork' && data.work) {
-            const saved = worksState.some(
-                work => work.id === data.work.id
-            );
-
-            if (!saved) {
-                throw new Error(
-                    'Karya belum ditemukan di database. Silakan periksa kembali.'
-                );
-            }
-        }
+        // Karya baru berstatus pending memang tidak dikirim ke state publik.
+        // Karena itu jangan memeriksa keberadaannya melalui worksState pengunjung.
+        // Refresh tetap dilakukan agar like/komentar dan karya published tersinkron.
 
         // Pastikan perubahan kurasi sudah tersimpan.
         if (action === 'curateWork') {
@@ -887,8 +878,7 @@ async function diksiSave(action, data = {}) {
                                     <option value="all">Semua Status</option>
                                     <option value="published">Diterbitkan (Published)</option>
                                     <option value="pending">Menunggu Kurasi</option>
-                                    <option value="revision">Perlu Revisi</option>
-                                    <option value="rejected">Ditolak</option>
+                                            <option value="rejected">Ditolak</option>
                                 </select>
                                 <select id="cms-filter-category" onchange="renderCmsTable()" class="px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
                                     <option value="all">Semua Kategori</option>
@@ -1139,9 +1129,9 @@ async function diksiSave(action, data = {}) {
 
                 <!-- DRAG & DROP UPLOAD DOKUMEN BERKAS -->
                 <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">Unggah Berkas Naskah (PDF / DOC / DOCX / TXT)</label>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Unggah Berkas Naskah (PDF / DOC / DOCX)</label>
                     <div id="drop-zone" class="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-4 text-center cursor-pointer transition bg-slate-50 hover:bg-indigo-50/40 relative">
-                        <input type="file" id="input-file" accept=".pdf,.doc,.docx,.txt" onchange="handleFileSelect(this.files)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                        <input type="file" id="input-file" accept=".pdf,.doc,.docx" onchange="handleFileSelect(this.files)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                         
                         <div id="upload-prompt" class="space-y-2">
                             <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
@@ -1150,7 +1140,7 @@ async function diksiSave(action, data = {}) {
                             <div class="text-xs text-slate-600">
                                 <span class="font-bold text-indigo-600">Klik untuk jelajah file</span> atau tarik & lepaskan dokumen di sini
                             </div>
-                            <p class="text-[11px] text-slate-400">Format yang didukung: PDF, DOC, DOCX, TXT (Maksimum 10MB)</p>
+                            <p class="text-[11px] text-slate-400">Format yang didukung: PDF, DOC, DOCX (Maksimum 4MB)</p>
                         </div>
 
                         <!-- Preview Berkas Terpilih -->
@@ -1272,6 +1262,11 @@ async function diksiSave(action, data = {}) {
                 </button>
             </div>
 
+            <div id="curate-file-preview-wrap" class="hidden my-2 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                <div class="px-3 py-2 text-[11px] font-bold text-slate-600 bg-slate-50 border-b border-slate-200">PRATINJAU LAMPIRAN</div>
+                <iframe id="curate-file-preview" title="Pratinjau lampiran untuk kurator" class="w-full h-64 sm:h-80 bg-white" src="about:blank" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            </div>
+
             <!-- Body Reader / Pratinjau Teks -->
             <div class="my-2 p-4 sm:p-6 bg-slate-50 rounded-2xl border border-slate-200 overflow-y-auto max-h-56 custom-scrollbar">
                 <p id="curate-modal-body" class="text-xs sm:text-sm text-slate-700 leading-relaxed font-serif whitespace-pre-line"></p>
@@ -1293,13 +1288,47 @@ async function diksiSave(action, data = {}) {
                         <button type="button" onclick="processCuration('rejected')" class="px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition">
                             <i class="fa-solid fa-circle-xmark mr-1"></i> Tolak Naskah
                         </button>
-                        <button type="button" onclick="processCuration('revision')" class="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition">
-                            <i class="fa-solid fa-rotate-left mr-1"></i> Minta Revisi
+                        <button type="button" onclick="processCuration('pending')" class="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition">
+                            <i class="fa-solid fa-rotate-left mr-1"></i> Kembalikan untuk Perbaikan
                         </button>
                         <button type="button" onclick="processCuration('published')" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md transition">
                             <i class="fa-solid fa-circle-check mr-1"></i> Terima & Terbitkan
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL PEMBACA KARYA (PDF / WORD / TEKS)   -->
+    <!-- ========================================== -->
+    <div id="modal-work-reader" class="fixed inset-0 z-[70] hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-white rounded-2xl sm:rounded-3xl w-full max-w-6xl h-[94vh] shadow-2xl relative flex flex-col overflow-hidden">
+            <div class="px-4 sm:px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                    <div class="text-[10px] uppercase tracking-widest font-bold text-indigo-600">Ruang Baca DIKSI</div>
+                    <h2 id="reader-title" class="text-lg sm:text-2xl font-serif font-bold text-slate-900 truncate">Judul Karya</h2>
+                    <p id="reader-meta" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <button type="button" onclick="closeWorkReader()" aria-label="Tutup pembaca" class="shrink-0 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 bg-slate-50 border-b border-slate-200">
+                <span id="reader-file-label" class="text-xs text-slate-600 truncate">Naskah</span>
+                <div class="flex gap-2">
+                    <a id="reader-open-drive" href="#" target="_blank" rel="noopener" class="hidden px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold"><i class="fa-brands fa-google-drive mr-1"></i> Buka Drive</a>
+                    <a id="reader-download" href="#" target="_blank" rel="noopener" class="hidden px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold"><i class="fa-solid fa-download mr-1"></i> Unduh Naskah</a>
+                </div>
+            </div>
+            <div id="reader-document-area" class="flex-1 min-h-0 bg-slate-200">
+                <iframe id="reader-document-frame" title="Pratinjau naskah DIKSI" class="hidden w-full h-full bg-white" src="about:blank" allow="autoplay" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                <div id="reader-text-content" class="hidden h-full overflow-y-auto bg-white px-6 sm:px-12 py-8">
+                    <article id="reader-text-body" class="max-w-3xl mx-auto whitespace-pre-wrap break-words text-sm sm:text-base leading-8 text-slate-800 font-serif"></article>
+                </div>
+                <div id="reader-empty-state" class="hidden h-full flex flex-col items-center justify-center p-8 text-center bg-white">
+                    <i class="fa-solid fa-file-circle-question text-4xl text-slate-300 mb-3"></i>
+                    <p class="font-bold text-slate-700">Pratinjau belum tersedia</p>
+                    <p class="text-xs text-slate-500 mt-1">Berkas tidak ditemukan atau akses Google Drive belum tersedia.</p>
                 </div>
             </div>
         </div>
@@ -1332,7 +1361,6 @@ async function diksiSave(action, data = {}) {
                         <select id="edit-work-status" class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
                             <option value="published">Diterbitkan (Published)</option>
                             <option value="pending">Menunggu Kurasi</option>
-                            <option value="revision">Perlu Revisi</option>
                             <option value="rejected">Ditolak</option>
                         </select>
                     </div>
@@ -1457,7 +1485,7 @@ async function diksiSave(action, data = {}) {
                 summary: 'Kisah pertemuan dua perancang arsitektur digital di tengah nostalgia lorong kota bersejarah.',
                 content: 'Di antara dinding cagar budaya yang lapuk dan hembusan angin sore, Bayu menggenggam gawai tablet miliknya. Kota tua ini tak lagi sekadar batuan bata tua, melainkan hamparan augmented reality yang memancarkan kenangan masa lalu. Siti datang membawa secangkir kopi panas...',
                 file: { name: 'Jejak_Piksel_Kota_Tua.pdf', size: '1.2 MB', dataUrl: null },
-                status: 'published', // 'published', 'pending', 'revision', 'rejected'
+                status: 'published', // status backend: published, pending, rejected
                 featured: true,
                 date: '01 Nov 2026',
                 reads: 420,
@@ -1626,16 +1654,16 @@ async function diksiSave(action, data = {}) {
         function handleFileSelect(files) {
             if (!files || files.length === 0) return;
             const file = files[0];
-            const allowedExts = ['pdf', 'doc', 'docx', 'txt'];
+            const allowedExts = ['pdf', 'doc', 'docx'];
             const fileExt = file.name.split('.').pop().toLowerCase();
 
             if (!allowedExts.includes(fileExt)) {
-                alert("Format berkas tidak didukung! Harap unggah file PDF, DOC, DOCX, atau TXT.");
+                alert("Format berkas tidak didukung! Harap unggah file PDF, DOC, atau DOCX.");
                 return;
             }
 
-            if (file.size > 4 * 1024 * 1024) { // Maks 10MB
-                alert("Ukuran berkas melebihi batas 10MB.");
+            if (file.size > 4 * 1024 * 1024) { // Maksimum 4MB sesuai batas backend
+                alert("Ukuran berkas melebihi batas 4MB sesuai batas backend DIKSI.");
                 return;
             }
 
@@ -1646,7 +1674,7 @@ async function diksiSave(action, data = {}) {
     name: file.name,
     size: formatBytes(file.size),
     ext: fileExt,
-    mimeType: file.type || 'application/octet-stream',
+    mimeType: file.type || ({pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[fileExt] || 'application/octet-stream'),
     dataUrl: e.target.result
 };
                 displayFilePreview(currentUploadedFile);
@@ -1757,8 +1785,12 @@ async function diksiSave(action, data = {}) {
 
         function logoutAdmin() {
             isAdminLoggedIn = false;
+            window.diksiAdminPin = '';
+            // Bersihkan data antrean privat dari memori browser setelah logout.
+            worksState = worksState.filter(work => work.status === 'published');
             showToast("Logged Out", "Anda telah keluar dari Dasbor Admin.");
             switchView('public');
+            diksiRefreshFromSheets(false);
         }
 
         async function handleChangePassword(e) {
@@ -2034,6 +2066,90 @@ async function diksiSave(action, data = {}) {
             })[char]);
         }
 
+        // Normalisasi lampiran agar kompatibel dengan struktur file dari Code.gs.
+        function normalizeDiksiFile(file) {
+            if (!file) return null;
+            const normalized = Object.assign({}, file);
+            const name = String(normalized.name || 'Lampiran karya');
+            const url = String(normalized.url || '').trim();
+            let fileId = String(normalized.fileId || '').trim();
+            if (!fileId && url) {
+                const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                if (match) fileId = match[1];
+            }
+            normalized.fileId = fileId;
+            const encodedId = encodeURIComponent(fileId);
+            normalized.previewUrl = normalized.previewUrl || normalized.embedUrl || (fileId ? 'https://drive.google.com/file/d/' + encodedId + '/preview' : url);
+            normalized.embedUrl = normalized.embedUrl || normalized.previewUrl;
+            normalized.downloadUrl = normalized.downloadUrl || (fileId ? 'https://drive.google.com/uc?export=download&id=' + encodedId : url);
+            normalized.url = url || (fileId ? 'https://drive.google.com/file/d/' + encodedId + '/view' : '');
+            const lowerName = name.toLowerCase();
+            const mime = String(normalized.mimeType || '').toLowerCase();
+            normalized.isPdf = normalized.isPdf === true || mime === 'application/pdf' || lowerName.endsWith('.pdf');
+            normalized.isWord = normalized.isWord === true || mime.indexOf('word') >= 0 || /\.(doc|docx)$/.test(lowerName);
+            normalized.type = normalized.isPdf ? 'pdf' : (normalized.isWord ? 'word' : (normalized.type || 'file'));
+            normalized.name = name;
+            return normalized;
+        }
+
+        function openWorkReader(workId) {
+            const work = worksState.find(item => String(item.id) === String(workId));
+            if (!work || work.status !== 'published') {
+                alert('Karya tidak tersedia untuk dibaca.');
+                return;
+            }
+            const modal = document.getElementById('modal-work-reader');
+            const frame = document.getElementById('reader-document-frame');
+            const textPanel = document.getElementById('reader-text-content');
+            const textBody = document.getElementById('reader-text-body');
+            const empty = document.getElementById('reader-empty-state');
+            const file = normalizeDiksiFile(work.file);
+
+            document.getElementById('reader-title').textContent = work.title || 'Tanpa Judul';
+            document.getElementById('reader-meta').textContent = 'Oleh ' + (work.author || 'Anonim') + (work.date ? ' • ' + work.date : '');
+            const download = document.getElementById('reader-download');
+            const openDrive = document.getElementById('reader-open-drive');
+            frame.src = 'about:blank';
+            frame.classList.add('hidden');
+            textPanel.classList.add('hidden');
+            empty.classList.add('hidden');
+            download.classList.add('hidden');
+            openDrive.classList.add('hidden');
+
+            if (file && file.previewUrl) {
+                document.getElementById('reader-file-label').textContent = file.name + (file.size ? ' • ' + file.size : '');
+                frame.src = file.previewUrl;
+                frame.classList.remove('hidden');
+                download.href = file.downloadUrl || file.url;
+                download.classList.toggle('hidden', !(file.downloadUrl || file.url));
+                openDrive.href = file.url || file.previewUrl;
+                openDrive.classList.remove('hidden');
+            } else if (work.content) {
+                document.getElementById('reader-file-label').textContent = 'Naskah teks';
+                textBody.textContent = work.content;
+                textPanel.classList.remove('hidden');
+            } else {
+                document.getElementById('reader-file-label').textContent = 'Lampiran tidak tersedia';
+                empty.classList.remove('hidden');
+            }
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+        }
+
+        function closeWorkReader() {
+            const modal = document.getElementById('modal-work-reader');
+            const frame = document.getElementById('reader-document-frame');
+            if (frame) frame.src = 'about:blank';
+            if (modal) modal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeWorkReader();
+            }
+        });
+
         function renderCategoryGrid(filter) {
             const container = document.getElementById('published-works-grid');
             let list = worksState.filter(w => w.status === 'published');
@@ -2062,18 +2178,11 @@ async function diksiSave(action, data = {}) {
                         <span>${work.date}</span>
                     </div>
                     ${renderWorkFeedback(work)}
-                    ${work.file && work.file.previewUrl ? `
-    <div class="mt-3">
-        <a href="${work.file.previewUrl}" target="_blank"
-           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
-           <i class="fa-solid fa-book-open"></i> Baca Naskah
-        </a>
-        <a href="${work.file.downloadUrl}" target="_blank"
-           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold ml-2">
-           <i class="fa-solid fa-download"></i> Unduh
-        </a>
-    </div>
-` : ''}
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button type="button" onclick="openWorkReader('${work.id}')" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
+                            <i class="fa-solid fa-book-open"></i> Baca Karya
+                        </button>
+                    </div>
                 </div>
             `).join('');
         }
@@ -2186,7 +2295,6 @@ async function diksiSave(action, data = {}) {
                 let statusBadge = '';
                 if (w.status === 'published') statusBadge = `<span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">Diterbitkan</span>`;
                 else if (w.status === 'pending') statusBadge = `<span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">Menunggu</span>`;
-                else if (w.status === 'revision') statusBadge = `<span class="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold">Revisi</span>`;
                 else statusBadge = `<span class="px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 text-xs font-semibold">Ditolak</span>`;
 
                 return `
@@ -2481,12 +2589,24 @@ async function diksiSave(action, data = {}) {
 
             // Handle Berkas Lampiran tampilan
             const fileBox = document.getElementById('curate-file-box');
-            if (work.file) {
+            const previewWrap = document.getElementById('curate-file-preview-wrap');
+            const previewFrame = document.getElementById('curate-file-preview');
+            const file = normalizeDiksiFile(work.file);
+            if (file) {
                 fileBox.classList.remove('hidden');
-                document.getElementById('curate-file-name').innerText = work.file.name;
-                document.getElementById('curate-file-size').innerText = `${work.file.size || 'Dokumen Terlampir'}`;
+                document.getElementById('curate-file-name').innerText = file.name;
+                document.getElementById('curate-file-size').innerText = file.size || 'Dokumen terlampir';
+                if (file.previewUrl) {
+                    previewFrame.src = file.previewUrl;
+                    previewWrap.classList.remove('hidden');
+                } else {
+                    previewFrame.src = 'about:blank';
+                    previewWrap.classList.add('hidden');
+                }
             } else {
                 fileBox.classList.add('hidden');
+                previewFrame.src = 'about:blank';
+                previewWrap.classList.add('hidden');
             }
 
             document.getElementById('modal-curate').classList.remove('hidden');
@@ -2505,8 +2625,9 @@ function downloadAttachment() {
         return;
     }
 
-    if (work.file.downloadUrl) {
-        window.open(work.file.downloadUrl, '_blank');
+    const file = normalizeDiksiFile(work.file);
+    if (file && file.downloadUrl) {
+        window.open(file.downloadUrl, '_blank', 'noopener');
         return;
     }
 
@@ -2525,6 +2646,8 @@ function downloadAttachment() {
 
         function closeCurateModal() {
             document.getElementById('modal-curate').classList.add('hidden');
+            const preview = document.getElementById('curate-file-preview');
+            if (preview) preview.src = 'about:blank';
             activeCuratingWorkId = null;
         }
 
