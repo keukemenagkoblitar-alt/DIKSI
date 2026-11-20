@@ -2420,14 +2420,32 @@ let diksiSubmissionInProgress = false; // Menyimpan objek berkas yang sedang dip
             }
         }
 
-        function deleteWork(id) {
+        async function deleteWork(id) {
             const w = worksState.find(x => x.id === id);
-            if (w && confirm(`Apakah Anda yakin ingin menghapus karya "${w.title}"?`)) {
-                worksState = worksState.filter(x => x.id !== id);
-                showToast("Naskah Dihapus", "Karya berhasil dihapus dari sistem.");
-                renderAdminView();
-                renderPublicView();
-            }
+            if (!w) return;
+
+            const confirmed = confirm(
+                `Apakah Anda yakin ingin menghapus karya "${w.title}"?\n\n` +
+                'Karya akan hilang dari halaman publik dan daftar admin. ' +
+                'Data arsip tetap tersimpan di database.'
+            );
+            if (!confirmed) return;
+
+            const ok = await diksiSave('deleteWork', {
+                id: id,
+                pin: window.diksiAdminPin || ''
+            });
+
+            if (!ok) return;
+
+            // Muat ulang data dari server agar penghapusan tidak hanya bersifat lokal.
+            worksState = worksState.filter(x => String(x.id) !== String(id));
+            renderAdminView();
+            renderPublicView();
+            showToast(
+                'Karya Berhasil Dihapus',
+                'Karya sudah disembunyikan dari website. Riwayatnya tetap tersimpan di database.'
+            );
         }
 
         // EDIT WORK MODAL (CMS)
